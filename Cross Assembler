@@ -332,6 +332,12 @@ public:
 		return num;
 	}
 	
+	int Convert_Dec( string str ) {
+		int num;
+		istringstream( str ) >> dec >> num;
+		return num;			
+	}
+	
 	// 紀錄新的詞塊 // 
 	void Push_in_token_record( string & temp, int line, CutType status ) {  
 		tokenRecord token;
@@ -402,12 +408,13 @@ public:
 					if ( temp.size() == 0 && charnum == 0 ) { // 空字串 
 						status = Other;	
 					}
-					
+
 					GetToken( temp, line, status, nextChar );
 					if ( charnum == 1 && front == "C" )
 						status = String;
-					else if ( charnum == 1 && front == "X" )
-						status = Hex; 
+					else if ( charnum == 1 && front == "X" ) {	
+						status = Hex;
+					}
 				}
 				
 				else if ( status != Remark ) { // 紀錄不是註解後的字元 
@@ -453,9 +460,16 @@ public:
 		int line = 1;
 		for ( int x = 0 ; x < source.size() ; x++ ) {
 			int tokennum = 1;
-			for ( int j = 0 ; j < token_record.size() ; j++ ) {
+			for ( int j = 0 ; j < token_record.size() && token_record[j].str != "END"; j++ ) {
 				if ( x == token_record[j].line && source[x].str.size() != 0 ) {
-					source[x].address = pc;
+					if ( token_record[j].str == "." && tokennum == 1 ) {
+						break;
+					}
+					
+					else if ( source[x].address == -1 ) {
+						source[x].address = pc;
+					}
+					
 					if ( token_record[j].numOftable == 5 && tokennum == 1 ) {
 						if ( !table.Exist_In_sym_table(token_record[j].str) ) {
 							  table.Set_sym_table(token_record[j].valueOftable,
@@ -488,12 +502,13 @@ public:
 						}
 					}
 					
-					else if ( table.Compare_Instr(token_record[j].str,"WORD")) {
+					else if ( table.Compare_Instr(token_record[j].str,"WORD") ||
+					          token_record[j].numOftable == 1 ) {
 						pc = pc + 3;
 					}
 					
 					else if ( table.Compare_Instr(token_record[j].str,"RESW") ) {
-						if ( token_record[j+1].numOftable == 5 ) {
+						if ( token_record[j+1].numOftable == 6 ) {
 							int num = Convert_Hex(token_record[j+1].str);
 							num = num * 3;
 							pc = pc + num;
@@ -502,23 +517,25 @@ public:
 					}
 					
 					else if ( table.Compare_Instr(token_record[j].str,"RESB") ) {
-						if ( token_record[j+1].numOftable == 5 ) {
-							int num = Convert_Hex(token_record[j+1].str);
+						if ( token_record[j+1].numOftable == 6 ) {
+							int num = Convert_Dec(token_record[j+1].str);
 							pc = pc + num;
 							j++;
 						}				
 					}
 					
 					else if ( table.Compare_Instr(token_record[j].str,"BYTE") ) {
-						if ( token_record[j+2].numOftable = 7 ) {
+						if ( token_record[j+2].numOftable == 7 ) {
 							int length = token_record[j+2].str.size();
 							pc = pc + length;
 							j = j + 2;
 						}
-					}
-					
-					else if ( token_record[j].numOftable == 1 ) {
-						pc = pc + 3;
+						
+						else if ( token_record[j+2].numOftable == 6 ) {
+							int length = token_record[j+2].str.size() / 2;
+							pc = pc + length;
+							j = j + 2;
+						} 
 					}
 					
 					tokennum++;
@@ -526,8 +543,6 @@ public:
 				}
 				
 				else if ( x < token_record[j].line ) {
-					if ( source[x].str.size() != 0 )
-						cout << hex << source[x].address << endl;
 					break;
 				}
 				
@@ -535,6 +550,14 @@ public:
 					break;
 				}
 			}
+		}
+		
+		for ( int i = 0 ; i < source.size() ; i++ ) {
+			if ( source[i].address != -1 ) {
+				cout << setiosflags(ios::uppercase) << hex << source[i].address; 
+			}
+			
+			cout << "\t" << source[i].str << endl;
 		}
 	}
 	/*
