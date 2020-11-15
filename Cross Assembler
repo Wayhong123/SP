@@ -1,6 +1,7 @@
 # include<fstream>
 # include<string.h>
 # include<iostream>
+# include<stdlib.h>
 # include<cstdlib>
 # include<cstring>
 # include<cctype>
@@ -137,6 +138,20 @@ public:
 		}
 	}
 	
+	string Get_opcode( string str ) {
+		bool find = false;
+		for ( int i = 0 ; i < opcode_table.size() ; i++ ) {
+			if ( Compare_Instr( str, opcode_table[i].str) ) {
+				find = true;
+				return opcode_table[i].opcode;
+			}
+		}
+		
+		if ( !find ) {
+			return "NO";
+		}
+	}
+	
 	bool Exist_In_sym_table( string str ) { // 重複標籤 
 		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
 			if ( Compare_Instr( sym_table[i].str, str) ) {
@@ -145,6 +160,16 @@ public:
 		}
 		
 		return false;
+	}
+	
+	int Get_Address( string str ) {
+		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
+			if ( Compare_Instr( sym_table[i].str, str) ) {
+				return sym_table[i].address;
+			}
+		}
+		
+		return 0;		
 	}
 	
 	void Set_sym_table( int valueOfTable, int address, string str ) {
@@ -168,6 +193,13 @@ public:
 			}
 			
 			sym_table.push_back(temp);
+		}
+	}
+	
+	void Show() {
+		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
+			if ( sym_table[i].str.size() != 0 )
+				cout << sym_table[i].str << "\t" << sym_table[i].address << endl;
 		}
 	}
 	
@@ -248,7 +280,7 @@ public:
 		}
 		
 		if ( !iSfind ) {  // 詞塊不在Table1~Table4 
-			int  total = 0;
+			int total = 0;
 			for ( int i = 0 ; i < goal.size() ; i++ ) {
 				total = total + goal[i];
 			}
@@ -305,7 +337,7 @@ private:
 	typedef struct sR {
 		string str; // 原始程式碼 
 		int address; // 地址 
-		int machine_code; // 機器碼 
+		string machine_code; // 機器碼 
 	}sourceRecord;
 	
 	fstream file;
@@ -326,16 +358,31 @@ public:
 		filename = name;	
 	}
 	
-	int Convert_Hex( string str ) { // 轉換成10進位 
+	int Convert_Dec( string str ) { // 轉換成10進位 
 		int num;
 		istringstream( str ) >> hex >> num;
 		return num;
 	}
 	
-	int Convert_Dec( string str ) {
-		int num;
-		istringstream( str ) >> dec >> num;
-		return num;			
+	string Convert_Hex( string str ) {
+		char temp[str.size()];
+		int i = 0 ;
+		for ( i = 0 ; i < str.size() ; i++ ) {
+			temp[i] = str[i];
+		}
+		
+		temp[i] = '\0';
+		i = atoi(temp);
+		int a = i / 16;
+		char *af = new char();
+		itoa(a,af,16);
+		delete af;
+		int b = i % 16;
+		char *bf = new char();
+		itoa(b,bf,16);
+		string result;
+		result = result + af + bf;
+		return result;
 	}
 	
 	// 紀錄新的詞塊 // 
@@ -372,7 +419,7 @@ public:
 			string temp;
 			sourceRecord sourceOfLine;
 			sourceOfLine.address = -1;
-			sourceOfLine.machine_code = 0;
+			sourceOfLine.machine_code = "-1";
 			table.Bulid_base_table();
 			int charnum = 0,line = 0;
 			CutType status = Other;
@@ -456,11 +503,13 @@ public:
 		}
 	}
 	
+	
 	void Assign_Address() { // 算出每個指令的地址
 		int line = 1;
 		for ( int x = 0 ; x < source.size() ; x++ ) {
 			int tokennum = 1;
-			for ( int j = 0 ; j < token_record.size() && token_record[j].str != "END"; j++ ) {
+			for ( int j = 0 ; j < token_record.size() && 
+			      !table.Compare_Instr(token_record[j].str,"END") ; j++ ) {
 				if ( x == token_record[j].line && source[x].str.size() != 0 ) {
 					if ( token_record[j].str == "." && tokennum == 1 ) {
 						break;
@@ -485,7 +534,7 @@ public:
 					
 					else if ( table.Compare_Instr(token_record[j].str,"START") ) {
 						if ( token_record[j+1].numOftable == 6 ) {
-							int num = Convert_Hex(token_record[j+1].str);
+							int num = Convert_Dec(token_record[j+1].str);
 							pc = pc + num;
 							for ( int i = x ; i < source.size() ; i++ ) {
 								if ( i <= token_record[j].line ) {
@@ -509,7 +558,13 @@ public:
 					
 					else if ( table.Compare_Instr(token_record[j].str,"RESW") ) {
 						if ( token_record[j+1].numOftable == 6 ) {
-							int num = Convert_Hex(token_record[j+1].str);
+							char t[token_record[j+1].str.size()];
+							int w = 0;
+							for ( w = 0 ; w < token_record[j+1].str.size() ; w++ ) {
+								t[w] = token_record[j+1].str[w];
+							}
+							t[w] = '\0';
+							int num = atoi(t);
 							num = num * 3;
 							pc = pc + num;
 							j++;
@@ -518,7 +573,13 @@ public:
 					
 					else if ( table.Compare_Instr(token_record[j].str,"RESB") ) {
 						if ( token_record[j+1].numOftable == 6 ) {
-							int num = Convert_Dec(token_record[j+1].str);
+							char t[token_record[j+1].str.size()];
+							int w = 0;
+							for ( w = 0 ; w < token_record[j+1].str.size() ; w++ ) {
+								t[w] = token_record[j+1].str[w];
+							}
+							t[w] = '\0';
+							int num = atoi(t);
 							pc = pc + num;
 							j++;
 						}				
@@ -551,16 +612,107 @@ public:
 				}
 			}
 		}
-		
+	}
+	
+	void Generate_Machine_Code() {
+		table.Bulid_opcode_table();
 		for ( int i = 0 ; i < source.size() ; i++ ) {
-			if ( source[i].address != -1 ) {
-				cout << setiosflags(ios::uppercase) << hex << source[i].address; 
+			int tokennum = 1;
+			for ( int j = 0 ; j < token_record.size() ; j++ ) {
+				if ( i == token_record[j].line ) {
+					if ( table.Compare_Instr(token_record[j].str,"START") || 
+					     table.Compare_Instr(token_record[j].str,"RESW") || 
+						 table.Compare_Instr(token_record[j].str,"RESB") ||
+						 table.Compare_Instr(token_record[j].str,"END") ) {
+						break;
+					}
+					
+					else if ( tokennum == 1 && token_record[j].str == "." ) {
+						break;
+					}
+					
+					else if ( token_record[j].numOftable == 1 ) {
+						string temp = table.Get_opcode(token_record[j].str);
+						if ( token_record[j+1].numOftable == 5 && 
+						     token_record[j+1].line == i ) {
+							int adr_i = table.Get_Address(token_record[j+1].str);
+							char *adr_s = new char();
+							itoa( adr_i, adr_s, 16);
+							temp = temp + adr_s;
+							source[i].machine_code = temp;
+							i++;
+							delete adr_s;
+						}
+						
+						else {
+							string adr_s = "0000";
+							temp = temp + adr_s;
+							source[i].machine_code = temp;
+						}
+					}
+					
+					else if ( table.Compare_Instr(token_record[j].str,"WORD") ) {
+						if ( token_record[j+1].numOftable == 6 ) {
+							string temp;
+							char ch[token_record[j+1].str.size()];
+							int iii = 0;
+							int a = 0;
+							for ( iii = 0 ; iii < token_record[j+1].str.size() ; iii++ ) {
+								ch[iii] = token_record[j+1].str[a];
+								a++;
+							}
+							
+							
+							ch[iii] = '\0';
+							iii = atoi( ch );
+							itoa(iii,ch,16);
+							for ( int xx = 0 ; xx < 6 - token_record[j+1].str.size() ; xx++) {
+								temp = temp + "0";
+							}
+							
+							temp = temp + ch;
+							source[i].machine_code = temp;
+							j++;
+						}
+					}
+					
+					else if ( table.Compare_Instr(token_record[j].str,"BYTE") ) {
+						if ( token_record[j+2].numOftable == 7 ) {
+							string temp;
+							for ( int g = 0 ; g < token_record[j+2].str.size() ; g++ ) {
+								int asc = token_record[j+2].str[g];
+								string result2;
+								stringstream ss;
+								ss << asc;
+								string result = ss.str();
+								result2 = Convert_Hex(result);
+								temp = temp + result2;
+							}
+							
+							source[i].machine_code = temp;
+							j = j + 2;
+						}
+						
+						else if ( token_record[j+2].numOftable == 6 ) {
+							source[i].machine_code = token_record[j+2].str;
+							j = j + 2;
+						}
+					}
+					
+					tokennum++;
+				}
+				
+				else if ( i < token_record[j].line ) {
+					break;
+				}
+
+				else if ( source[i].str.size() == 0 ) {
+					break;
+				}
 			}
-			
-			cout << "\t" << source[i].str << endl;
 		}
 	}
-	/*
+	
 	void Out_File() {
 		string out_name;
 		// 取得標準檔案名稱 //  
@@ -577,32 +729,37 @@ public:
 		out_name = out_name + "_output.txt";
 		// 取得標準檔案名稱 //  
 		file.open( out_name.c_str(), ios::out );
+		int line = 5;
+		file << "Line\tLoc\tSource statement\t\tObject code\n\n";
 		for ( int i = 0 ; i < source.size() ; i++ ) {
-			file << source[i] << endl;
-			for ( int j = 0 ; j < token_record.size() ; j++ ) {
-				if ( token_record[j].line == i ) {
-					file << "(" << token_record[j].numOftable << ","
-						 << token_record[j].valueOftable << ")";
+			if ( source[i].str.size() != 0 ) {
+				if ( source[i].address != -1 ) {
+					char *ch = new char();
+					itoa(source[i].address,ch,16);
+					file << line << "\t" << ch << "\t" <<  source[i].str << "\t\t";
+					delete ch;
 				}
 				
-				else if ( token_record[j].line > i ) {
-					file << endl; 
-					break;
+				if ( source[i].machine_code != "-1" ) {
+					file << source[i].machine_code;
 				}
 			}
+			
+			file << endl;
+			line = line + 5;
 		}
 		
 		cout << endl <<out_name << " 已經輸出!!!\n" << endl; 
 		file << endl;
 		file.close();
 	}
-	*/
+	
 	void Clear() { // 初始化 
 		table.Clear();
 		for ( int i = 0 ; i < source.size() ; i++ ) {
 			source[i].str.clear();
 			source[i].address = 0;
-			source[i].machine_code = 0;
+			source[i].machine_code.clear();
 		}
 		
 		source.clear();
@@ -627,7 +784,8 @@ int main(void) {
 			
 			else {
 				assembler.Assign_Address();
-				//assembler.Out_File();
+				assembler.Generate_Machine_Code();
+				assembler.Out_File();
 				assembler.Clear();
 			}
 		}
