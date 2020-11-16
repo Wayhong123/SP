@@ -14,6 +14,49 @@ using namespace std;
 typedef enum { Space = -1, Remark, Special, String, Other, Newline, Number,Hex
 } CutType; // 字元的類型 
 
+class Convert {
+	public:
+		int stoi( string str ) {
+			char ch[str.size()];
+			int i = 0;
+			for ( i = 0 ; i < str.size() ; i++ ) {
+				ch[i] = str[i];
+			}
+			
+			ch[i] = '\0';
+			return atoi(ch);
+		}
+		
+		string itos( int num ) {
+			stringstream ss;
+			ss << num;
+			string str = ss.str();
+			ss.str("");
+			ss.clear();
+			return str;
+		}
+		
+		string upper( string  str ) {
+			for ( int i = 0 ; i < str.size() ; i++ ) {
+				if ( str[i] >= 97 && str[i] <= 122 ) {
+					str[i] = str[i] - 32;
+				}
+			}
+			
+			return str;
+		}
+		
+		string itos_format( int radix, string str ) {
+			char ch[str.size()];
+			int num = stoi(str);
+			itoa( num, ch, radix );
+			string result;
+			int i = 0;
+			result = ch;
+			return upper(result);
+		}
+};
+
 class Cutter {
 public:
 	CutType Cut( char ch ) { // 回傳字元的類型 
@@ -51,6 +94,7 @@ class Table {
 private:
 	fstream file;
 	Cutter cutter;
+	Convert convert;
 	vector< vector<string> > base_table; // Table1~Table4 
 	typedef struct tb {
 		string str; // 名稱 
@@ -60,7 +104,7 @@ private:
 	typedef struct symTb {
 		string str; // 名稱
 		int value;
-		int address; // 地址
+		string address; // 地址
 	}symbolTb;
 	
 	typedef struct op {
@@ -162,17 +206,15 @@ public:
 		return false;
 	}
 	
-	int Get_Address( string str ) {
+	string Get_Address( string str ) {
 		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
 			if ( Compare_Instr( sym_table[i].str, str) ) {
 				return sym_table[i].address;
 			}
-		}
-		
-		return 0;		
+		}	
 	}
 	
-	void Set_sym_table( int valueOfTable, int address, string str ) {
+	void Set_sym_table( int valueOfTable, string address, string str ) {
 		symTb temp;
 		temp.str = str;
 		temp.address = address;
@@ -206,7 +248,9 @@ public:
 	void Relocation( int pc ) {
 		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
 			if ( sym_table[i].str.size() != 0 ) {
-				sym_table[i].address = sym_table[i].address + pc;
+				int newadr = convert.stoi(sym_table[i].address);
+				newadr = newadr + pc;
+				sym_table[i].address = convert.itos(newadr);
 			}
 			
 			else {
@@ -336,12 +380,13 @@ private:
 	
 	typedef struct sR {
 		string str; // 原始程式碼 
-		int address; // 地址 
+		string address; // 地址 
 		string machine_code; // 機器碼 
 	}sourceRecord;
 	
 	fstream file;
 	string filename;
+	Convert convert;
 	int pc; // 程式計數器 
 	Cutter cutter; // 字元處理
 	Table table; // 表格
@@ -358,7 +403,7 @@ public:
 		filename = name;	
 	}
 	
-	int Convert_Dec( string str ) { // 轉換成10進位 
+	int Convert_Dec( string str ) { // 16進位轉換成10進位 
 		int num;
 		istringstream( str ) >> hex >> num;
 		return num;
@@ -418,7 +463,7 @@ public:
 			char nextChar = '\0';
 			string temp;
 			sourceRecord sourceOfLine;
-			sourceOfLine.address = -1;
+			sourceOfLine.address = "-1";
 			sourceOfLine.machine_code = "-1";
 			table.Bulid_base_table();
 			int charnum = 0,line = 0;
@@ -503,7 +548,6 @@ public:
 		}
 	}
 	
-	
 	void Assign_Address() { // 算出每個指令的地址
 		int line = 1;
 		for ( int x = 0 ; x < source.size() ; x++ ) {
@@ -515,14 +559,16 @@ public:
 						break;
 					}
 					
-					else if ( source[x].address == -1 ) {
-						source[x].address = pc;
+					else if ( source[x].address == "-1" ) {
+						string adr = convert.itos(pc);
+						source[x].address = adr;
 					}
 					
 					if ( token_record[j].numOftable == 5 && tokennum == 1 ) {
+						string adr = convert.itos(pc);
 						if ( !table.Exist_In_sym_table(token_record[j].str) ) {
 							  table.Set_sym_table(token_record[j].valueOftable,
-							                      pc,
+							                      adr,
 												  token_record[j].str);
 						}
 						
@@ -538,7 +584,9 @@ public:
 							pc = pc + num;
 							for ( int i = x ; i < source.size() ; i++ ) {
 								if ( i <= token_record[j].line ) {
-									source[i].address = source[i].address + num;
+									int newadr = convert.stoi(source[i].address);
+									newadr = newadr + pc;
+									source[i].address = convert.itos(newadr);
 								}
 								
 								else {
@@ -546,7 +594,7 @@ public:
 								}
 							}
 							
-							table.Relocation(num);
+							table.Relocation(pc);
 							j++; 
 						}
 					}
@@ -558,28 +606,16 @@ public:
 					
 					else if ( table.Compare_Instr(token_record[j].str,"RESW") ) {
 						if ( token_record[j+1].numOftable == 6 ) {
-							char t[token_record[j+1].str.size()];
-							int w = 0;
-							for ( w = 0 ; w < token_record[j+1].str.size() ; w++ ) {
-								t[w] = token_record[j+1].str[w];
-							}
-							t[w] = '\0';
-							int num = atoi(t);
+							int num = convert.stoi(token_record[j+1].str);
 							num = num * 3;
 							pc = pc + num;
 							j++;
-						} 
+						}
 					}
 					
 					else if ( table.Compare_Instr(token_record[j].str,"RESB") ) {
 						if ( token_record[j+1].numOftable == 6 ) {
-							char t[token_record[j+1].str.size()];
-							int w = 0;
-							for ( w = 0 ; w < token_record[j+1].str.size() ; w++ ) {
-								t[w] = token_record[j+1].str[w];
-							}
-							t[w] = '\0';
-							int num = atoi(t);
+							int num = convert.stoi(token_record[j+1].str);
 							pc = pc + num;
 							j++;
 						}				
@@ -612,6 +648,7 @@ public:
 				}
 			}
 		}
+		 
 	}
 	
 	void Generate_Machine_Code() {
@@ -635,13 +672,12 @@ public:
 						string temp = table.Get_opcode(token_record[j].str);
 						if ( token_record[j+1].numOftable == 5 && 
 						     token_record[j+1].line == i ) {
-							int adr_i = table.Get_Address(token_record[j+1].str);
-							char *adr_s = new char();
+						    char adr_s [token_record[j+1].str.size()];
+							int adr_i = convert.stoi(table.Get_Address(token_record[j+1].str));
 							itoa( adr_i, adr_s, 16);
 							temp = temp + adr_s;
 							source[i].machine_code = temp;
 							i++;
-							delete adr_s;
 						}
 						
 						else {
@@ -713,6 +749,7 @@ public:
 		}
 	}
 	
+	
 	void Out_File() {
 		string out_name;
 		// 取得標準檔案名稱 //  
@@ -733,20 +770,25 @@ public:
 		file << "Line\tLoc\tSource statement\t\tObject code\n\n";
 		for ( int i = 0 ; i < source.size() ; i++ ) {
 			if ( source[i].str.size() != 0 ) {
-				if ( source[i].address != -1 ) {
-					char *ch = new char();
-					itoa(source[i].address,ch,16);
-					file << line << "\t" << ch << "\t" <<  source[i].str << "\t\t";
-					delete ch;
+				file << line << "\t";
+				if ( source[i].address != "-1" ) {
+					file << convert.itos_format(16,source[i].address) << "\t";
+				}
+				
+				file << source[i].str;
+				if ( source[i].str.size() < 7 ) {
+					file << "\t";
 				}
 				
 				if ( source[i].machine_code != "-1" ) {
-					file << source[i].machine_code;
+					
+					file << "\t\t" << convert.upper(source[i].machine_code);
 				}
+				
+				line = line + 5;
 			}
 			
 			file << endl;
-			line = line + 5;
 		}
 		
 		cout << endl <<out_name << " 已經輸出!!!\n" << endl; 
@@ -758,7 +800,7 @@ public:
 		table.Clear();
 		for ( int i = 0 ; i < source.size() ; i++ ) {
 			source[i].str.clear();
-			source[i].address = 0;
+			source[i].address.clear();
 			source[i].machine_code.clear();
 		}
 		
