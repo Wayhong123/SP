@@ -15,18 +15,7 @@ typedef enum { Space = -1, Remark, Special, String, Other, Newline, Number,Hex
 } CutType; // 字元的類型 
 
 class Convert {
-	public:
-		int stoi( string str ) {
-			char ch[str.size()];
-			int i = 0;
-			for ( i = 0 ; i < str.size() ; i++ ) {
-				ch[i] = str[i];
-			}
-			
-			ch[i] = '\0';
-			return atoi(ch);
-		}
-		
+	public:		
 		string itos( int num ) {
 			stringstream ss;
 			ss << num;
@@ -48,7 +37,7 @@ class Convert {
 		
 		string itos_format( int radix, string str ) {
 			char ch[str.size()];
-			int num = stoi(str);
+			int num = atoi(str.c_str());
 			itoa( num, ch, radix );
 			string result;
 			int i = 0;
@@ -248,7 +237,7 @@ public:
 	void Relocation( int pc ) {
 		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
 			if ( sym_table[i].str.size() != 0 ) {
-				int newadr = convert.stoi(sym_table[i].address);
+				int newadr = atoi(sym_table[i].address.c_str());
 				newadr = newadr + pc;
 				sym_table[i].address = convert.itos(newadr);
 			}
@@ -415,7 +404,7 @@ public:
 		char temp2[str.size()];
 		int i = 0 ;		
 		temp[i] = '\0';
-		i = convert.stoi(str);
+		i = atoi(str.c_str());
 		int a = i / 16;
 		itoa(a,temp,16);
 		int b = i % 16;
@@ -584,7 +573,7 @@ public:
 							pc = pc + num;
 							for ( int i = x ; i < source.size() ; i++ ) {
 								if ( i <= token_record[j].line ) {
-									int newadr = convert.stoi(source[i].address);
+									int newadr = atoi(source[i].address.c_str());
 									newadr = newadr + pc;
 									source[i].address = convert.itos(newadr);
 								}
@@ -606,7 +595,7 @@ public:
 					
 					else if ( table.Compare_Instr(token_record[j].str,"RESW") ) {
 						if ( token_record[j+1].numOftable == 6 ) {
-							int num = convert.stoi(token_record[j+1].str);
+							int num = atoi(token_record[j+1].str.c_str());
 							num = num * 3;
 							pc = pc + num;
 							j++;
@@ -615,7 +604,7 @@ public:
 					
 					else if ( table.Compare_Instr(token_record[j].str,"RESB") ) {
 						if ( token_record[j+1].numOftable == 6 ) {
-							int num = convert.stoi(token_record[j+1].str);
+							int num = atoi(token_record[j+1].str.c_str());
 							pc = pc + num;
 							j++;
 						}				
@@ -673,7 +662,7 @@ public:
 						if ( token_record[j+1].numOftable == 5 && 
 						     token_record[j+1].line == i ) {
 						    char adr_s [token_record[j+1].str.size()];
-							int adr_i = convert.stoi(table.Get_Address(token_record[j+1].str));
+							int adr_i = atoi(table.Get_Address(token_record[j+1].str).c_str());
 							itoa( adr_i, adr_s, 16);
 							temp = temp + adr_s;
 							source[i].machine_code = temp;
@@ -691,8 +680,8 @@ public:
 						if ( token_record[j+1].numOftable == 6 ) {
 							string temp;
 							char ch[token_record[j+1].str.size()];
-							int iii = convert.stoi(table.Get_Address(token_record[j+1].str));
-							itoa(iii,ch,16);				
+							int iii = atoi(token_record[j+1].str.c_str());
+							itoa(iii,ch,16);		
 							temp = ch;
 							source[i].machine_code = temp;
 							j++;
