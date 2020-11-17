@@ -13,7 +13,10 @@
 using namespace std;
 
 typedef enum { Space = -1, Remark, Special, String, Other, Newline, Number,Hex
-} CutType; // 字元的類型 
+} CutType; // 字元的類型
+
+typedef enum { format1 = 1, format2, format3, format4
+}length;
 
 class Converter {
 	public:		
@@ -49,26 +52,6 @@ class Converter {
 			itoa( num, ch2, radix );
 			string str = ch2;
 			return str;
-		}
-						
-		string Ascii_Hex( string str ) {
-			char temp[str.size()];
-			char temp2[str.size()];
-			int i = 0 ;		
-			temp[i] = '\0';
-			i = atoi(str.c_str());
-			int a = i / 16;
-			itoa(a,temp,16);
-			int b = i % 16;
-			itoa(b,temp2,16);
-			string result;
-			if ( temp != "0" ) {
-				result = result + temp + temp2;
-			}
-			else {
-				result = result + temp2;
-			}
-			return result;
 		}
 };
 
@@ -577,6 +560,9 @@ public:
 					
 					else if ( source[x].address == "-1" ) {
 						string adr = convert.itos(pc);
+						if ( adr == "0" ) {
+							adr = "0000";
+						}
 						source[x].address = adr;
 					}
 					
@@ -786,14 +772,30 @@ public:
 					file << convert.itos_format(16,source[i].address) << "\t";
 				}
 				
-				file << source[i].str;
-				if ( source[i].str.size() < 6 ) {
+				else {
 					file << "\t";
 				}
+				
+				file << source[i].str;
+				int tokennum = 0;
+				for ( int j = 0 ; j < token_record.size() ; j++ ) {
+					if ( token_record[j].line == i ) {
+						tokennum++;
+					}
+				}
+				
+				if ( tokennum < 2 ) {
+					file << "\t";
+				}
+				
 				if ( source[i].machine_code != "-1" ) {
 					string str = source[i].machine_code;
 					transform(str.begin(), str.end(), str.begin(), ::toupper);
-					file << "\t\t" << str;
+					if ( source[i].str.find_first_of("\t") == 0 && tokennum > 3 ) {
+						file << "\t" << str;
+					}
+					else				
+						file << "\t\t" << str;
 				}
 				
 				line = line + 5;
