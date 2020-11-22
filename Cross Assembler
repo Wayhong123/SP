@@ -600,9 +600,8 @@ public:
 		else if ( other[other.size()-1] == '0' ) {
 			if ( adr.size() != 0 && numOftable != "6" ) {
 				other[other.size()-2] = '1';
-				other = Middle( other );
-				adr = convert.itos(atoi(convert.Hex_format(16,adr).c_str()) 
-				                   - atoi(convert.Hex_format(16,source[line].address).c_str()) );
+				other = Middle( other );			
+				adr = convert.itos( atoi(adr.c_str()) - atoi(source[line].address.c_str()));
 				adr = convert.Hex_format(16,adr);
 				string disp;
 				for ( int i = 0 ; i < adr.size() ; i++ ) {
@@ -610,6 +609,8 @@ public:
 						disp = disp + adr[i];
 					}	
 				}
+				
+				disp = Add0(3,disp);
 				string combine = convert.Hex_format(16,convert.itos( convert.Convert_Dec(opcode) + 3));
 				return combine + other + disp;
 			}
