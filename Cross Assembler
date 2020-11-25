@@ -309,6 +309,15 @@ public:
 		}	
 	}
 	
+	void Specific_Relocation( string str, string adr) {
+		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
+			if ( sym_table[i].str == str ) {
+				sym_table[i].address = adr;
+				break;
+			}
+		}		
+	}
+	
 	bool Compare( string str, string str2 ) { // 比較是否為相同指令 
 		transform(str.begin(),str.end(),str.begin(), ::toupper);
 		transform(str2.begin(),str2.end(),str2.begin(), ::toupper);		
@@ -426,6 +435,14 @@ public:
 			string_table[i].value = 0;	
 		}		
 		string_table.clear();
+		
+		for ( int i = 0 ; i < literal_table.size() ; i++ ) {
+			literal_table[i].str.clear();
+			literal_table[i].address.clear();
+			literal_table[i].value = 0;
+		}
+		
+		literal_table.clear(); 
 	}
 	
 };
@@ -638,7 +655,7 @@ public:
 	}
 	
 	string SICXE_Machine_Code( string opcode, string reg, string other, string adr, int line, 
-	                           string numOftable, bool base, string base_adr ) { // SIC機器碼 
+	                           string numOftable, string base_adr ) { // SIC機器碼 
 		string format = table.Get_format(opcode);
 		opcode = table.Get_opcode(opcode);
 		if ( format == "1" ) {
@@ -650,14 +667,15 @@ public:
 		}
 		
 		else if ( other[other.size()-1] == '0' ) {
-			if ( adr.size() != 0 && numOftable != "6" ) {
+			if ( adr.size() != 0 && ( numOftable != "6" ) ) {
 				string temp = convert.itos( atoi(adr.c_str()) - atoi(source[line].address.c_str()));
-				temp = convert.Hex_format(16,temp);
-				if ( temp[temp.size()-4] == 'F' ) {
+				string temp2 = convert.Hex_format(16,temp);
+				if ( temp2[temp2.size()-4] == 'F' || atoi(temp.c_str()) >= 0 ) {
 					other[other.size()-2] = '1';
-					adr = temp;
+					adr = convert.Hex_format(16,temp);
 				}
-				else if ( base ) {
+				
+				else if ( base_adr.size() != 0 ) {
 					other[3] = '1';
 					adr = convert.itos( atoi(adr.c_str()) - atoi(base_adr.c_str()));
 					adr = convert.Hex_format(16,adr);
@@ -667,9 +685,9 @@ public:
 					cout << "<-Error Message-> Line: " + convert.itos(line);
 					if ( line+2 < 10 )
 						cout << " ";
-					cout << " 機器碼有誤!!!" << endl; 
+					cout << " Machine Code Translate Error!!!" << endl; 
 				}
-				
+
 				string other2 = Middle( other );
 				string disp;
 				for ( int i = 0 ; i < adr.size() ; i++ ) {
@@ -696,7 +714,7 @@ public:
 		}
 		
 		else {
-			if ( base && other[2] == '1' ) {
+			if ( base_adr.size() != 0 && other[2] == '1' ) {
 				adr = base_adr;
 				other[3] = '1';
 			}
@@ -707,7 +725,7 @@ public:
 			return combine + other2 + adr;
 			
 		}
-		
+	
 		return "0";
 	}
 		
@@ -727,19 +745,31 @@ public:
 	
 	void Assign_Address( string type ) { // 算出每個指令的地址( Pass 1 )
 		for ( int x = 0 ; x < source.size() ; x++ ) {
-			int tokennum = 1;
-			bool literal = false;
+			int tokennum = 1, point = 0;
+			bool literal = false, label = false;
 			for ( int j = 0 ; j < token_record.size() && 
 			      !table.Compare(token_record[j].str,"END") ; j++ ) {
 				if ( x == token_record[j].line && source[x].str.size() != 0 ) {
-					if ( token_record[j].str == "." && tokennum == 1 && token_record[j].numOftable == 4 ) {
+					if ( token_record[j].str == "." && tokennum == 1  && token_record[j].numOftable == 4 ) {
 						break;
 					}
 					
-					else if ( table.Compare(token_record[j].str,"LTORG") ||
-					          table.Compare(token_record[j].str,"BASE") ) {
+					else if ( token_record[j].str == "."  && token_record[j].numOftable == 4 ) {
+						;
+					}
+					
+					else if ( table.Compare(token_record[j].str,"BASE") ) {
 						break;
 					}
+										
+					else if ( table.Compare(token_record[j].str,"LTORG") ) {
+						sourceRecord temp;
+						temp.address = convert.itos(pc);
+						//source.insert( source.begin()+x,temp);
+						table.Set_literal_table(pc);
+						pc = pc + 3;
+					}
+					
 					else if ( source[x].address == "-1" ) {
 						string adr = convert.itos(pc);
 						source[x].address = Add0(4,adr);
@@ -747,6 +777,7 @@ public:
 					
 					if ( token_record[j].numOftable == 5 && tokennum == 1 ) {
 						string adr = convert.itos(pc);
+						label = true;
 						if ( !table.Exist_In_sym_table(token_record[j].str) ) {
 							  table.Set_sym_table(token_record[j].valueOftable,
 							                      adr,
@@ -757,12 +788,19 @@ public:
 							cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Duplicated Symbol"; 
 						}
 					}
-					
-					else if ( token_record[j].numOftable == 4 && token_record[j].str == "=" ) {
+
+					else if ( token_record[j].str[0] == 39 && 
+					          ( ( tokennum == 4 || tokennum == 2 ) || ( tokennum == 5 || tokennum == 3 ) ||
+							    ( tokennum == 6 || tokennum == 4 ) ) ) {
+						point++;
+					}
+										
+					else if (token_record[j].numOftable == 4 && token_record[j].str == "=" &&
+					          ( tokennum == 3 || tokennum == 2 ) ) {
 						literal = true;
 					}
 					
-					else if ( literal ) {
+					else if ( literal && ( tokennum == 4 || tokennum == 3 || tokennum == 5 ) ) {
 						table.push_in_literal_table(token_record[j].str);
 					}
 					
@@ -806,6 +844,55 @@ public:
 					    	else {
 					    		pc = pc + Instr_Length(token_record[j].str);
 					    	}
+						}
+						
+						else if ( table.Compare(token_record[j].str,"EQU" ) ) {
+							string op1,op2,opr;
+							for ( int g = j + 1;  g < token_record.size() ; g++ ) {
+								if ( token_record[g].line == x ) {
+									if ( token_record[g].numOftable == 5 ) {
+										if ( op1.size() == 0 ) {
+											op1 = table.Get_Address(token_record[g].str );
+										}
+										
+										else if ( op2.size() == 0 ) {
+											op2 = table.Get_Address(token_record[g].str );
+										}
+									}
+									
+									else if ( token_record[g].numOftable == 6 ) {
+										op1 = token_record[g].str;
+									}
+									
+									else if ( token_record[g].numOftable == 4 ) {
+										opr = token_record[g].str;
+									}
+								}
+							}
+							
+							if ( opr == "+" ) {
+								source[x].address = convert.itos( atoi( op1.c_str() ) + atoi(op2.c_str() ));
+							}
+
+							else if ( opr == "-" ) {
+								source[x].address = convert.itos( atoi( op1.c_str() ) - atoi(op2.c_str() ));
+							}
+							
+							else if ( opr == "*" && op1.size() == 0 && op2.size() == 0 )
+								;
+							else {
+								source[x].address = op1;
+							}
+							
+							if ( label ) {
+								int g = j;
+								for ( g = g;  g < token_record.size() ; g-- ) {
+									if ( token_record[g-1].line != x ) {
+										break;
+									}
+								}
+								table.Specific_Relocation( token_record[g].str,source[x].address );
+							}
 						}
 						else {
 							pc = pc + 3;
@@ -875,17 +962,28 @@ public:
 				else if ( source[x].str.size() == 0 ) {
 					break;
 				}
-				
+
 				else if ( table.Compare(token_record[j+1].str,"END") ) {
-					table.Set_literal_table(pc+3);
+					table.Set_literal_table(pc);
+					pc = pc + 3;
 				}
 				
-				else if ( table.Compare(token_record[j].str,"LTORG") ) {
-					table.Set_literal_table(pc+3);   	
+				else if ( point % 2 != 0 ) {
+					cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
 				}
 			}
 		}
 		 
+	}
+	
+	int Find_Next_Pc( int i ) {
+		for ( int j = i+1 ; j < source.size() ;j++ ) {
+			if ( source[j].address != "-1" ) {
+				return j;
+			}
+		}
+		
+		return -200;
 	}
 	
 	void Generate_Machine_Code( string type ) { // 產生機器碼( Pass 2 ) 
@@ -914,6 +1012,11 @@ public:
 					else if ( tokennum == 1 && token_record[j].str == "." ) {
 						break;
 					}
+
+					else if ( token_record[j].str == "."  && token_record[j].numOftable == 4 ) {
+						;
+					}
+					
 					else if ( token_record[j].numOftable == 5 && tokennum == 1 ) {
 						;	
 					}
@@ -972,8 +1075,8 @@ public:
 						i = "0";
 					}
 					
-					else if ( token_record[j].str == "+" && token_record[j].numOftable == 4 && 
-					          type == "SICXE" && ( tokennum == 1 || tokennum == 2 )) {
+					else if ( token_record[j].str == "+" && token_record[j].numOftable == 4 &&
+					          type == "SICXE" && ( tokennum == 1 || tokennum == 2 ) ) {
 						e = "1";	
 					}
 					
@@ -1013,7 +1116,7 @@ public:
 						}
 					}
 					
-					else if ( token_record[j].numOftable == 1 && ( tokennum == 1 || tokennum == 2 )) {
+					else if ( token_record[j].numOftable == 1 && ( tokennum == 1 || tokennum == 2 || tokennum == 3 )) {
 						if ( opcode.size() == 0 && type == "SIC" )
 							opcode = table.Get_opcode(token_record[j].str);
 						else if ( opcode.size() == 0 && type == "SICXE" )
@@ -1091,8 +1194,8 @@ public:
 							string reg = r1+r2;
 							string other = n+i+x+b+p+e;
 							source[line].machine_code = SICXE_Machine_Code( opcode, reg, other, 
-							                                                adr_s, line+1, numOftable,
-																			base, base_adr );
+							                                                adr_s, Find_Next_Pc(line), numOftable,
+																			base_adr );
 						}
 						
 						else if ( !escape ) {
