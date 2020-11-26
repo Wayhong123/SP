@@ -782,14 +782,6 @@ public:
 		return str;
 	}
 	
-	void Relocation_Line( int x ) {
-		for ( int j = 0 ; j < token_record.size() ; j++ ) {
-			if ( x <= token_record[j].line ) {
-				token_record[j].line++;
-			}
-		}
-	}
-	
 	void Source_Insert( int x ) {
 		int add = table.Get_literal_table_size();
 		int g = 1;
@@ -1369,18 +1361,18 @@ public:
 					}
 				}
 				
-				if ( tokennum <= 2 ) {
-					file << "\t";
-				}
-				
 				if ( source[i].machine_code != "-1" ) {
 					string str = source[i].machine_code;
 					transform(str.begin(), str.end(), str.begin(), ::toupper);
-					if ( source[i].str.find_first_of("\t") == 0 && tokennum > 3 ) {
-						file << "\t" << str;
+					if ( tokennum < 2 ) {
+						file << "\t\t\t";
 					}
-					else				
-						file << "\t\t" << str;
+					
+					else {
+						file << "\t\t";
+					}
+					
+					file << str;
 				}
 				
 				line = line + 5;
