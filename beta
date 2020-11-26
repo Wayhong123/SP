@@ -745,7 +745,7 @@ public:
 	
 	void Relocation_Line( int x ) {
 		for ( int j = 0 ; j < token_record.size() ; j++ ) {
-			if ( x >= token_record[j].line ) {
+			if ( x <= token_record[j].line ) {
 				token_record[j].line++;
 			}
 		}
@@ -755,12 +755,11 @@ public:
 		sourceRecord ltr;
 		for ( int x = 0 ; x < source.size() ; x++ ) {
 			int tokennum = 1, point = 0;
-			bool literal = false, label = false;
+			bool literal = false, label = false, escape = true;
 			for ( int j = 0 ; j < token_record.size() && 
 			      !table.Compare(token_record[j].str,"END") ; j++ ) {
 				if ( x == token_record[j].line && source[x].str.size() != 0 && 
 				     source[x].machine_code == "-1" ) {
-				     //	cout << token_record[j].str << endl;
 					if ( token_record[j].str == "." && tokennum == 1  && token_record[j].numOftable == 4 ) {
 						break;
 					}
@@ -777,8 +776,7 @@ public:
 						table.Set_literal_table(pc);
 						ltr.address = convert.itos(pc);
 						source.insert(source.begin()+x+1,ltr);
-						Relocation_Line( x+1 );
-						x++;
+						Relocation_Line( x );
 						pc = pc + ( ltr.machine_code.size() / 2);
 						ltr.str.clear();
 						ltr.address.clear();
@@ -832,6 +830,10 @@ public:
 						}
 						
 						else if ( token_record[j].numOftable == 6 ) {
+							if ( point != 0 ) {
+								ltr.str = "*\t=X'"+ token_record[j].str + "'";
+							}
+							
 							ltr.machine_code = token_record[j].str;
 						}
 					}
@@ -1000,14 +1002,6 @@ public:
 					tokennum++;
 					
 				}
-				
-				/*else if ( source[x].machine_code != "-1" ) {
-					break;
-				}*/ 
-				
-				/*else if ( !escape ) {
-					escape = true;
-				}*/
 				
 				else if ( x < token_record[j].line ) {
 					break;
@@ -1262,10 +1256,6 @@ public:
 						}
 					}
 				}
-
-				/*else if ( source[line].machine_code != "-1" ) {
-					break;
-				}*/ 
 				
 				else if ( line < token_record[j].line ) {
 					break;
