@@ -1,0 +1,1448 @@
+# include<fstream>
+# include<string.h>
+# include<iostream>
+# include<cctype>
+# include<stdlib.h>
+# include<cstdlib>
+# include<limits>
+# include<cstring>
+# include<cctype>
+# include<algorithm>
+# include<sstream>
+# include<vector>
+# include<iomanip>
+using namespace std;
+
+typedef enum { Space = -1, Remark, Special, String, Other, Newline, Number,Hex
+} CutType; // 字元的類型
+
+class Converter {
+	public:		
+		string itos( int num ) { // 整數轉字串 
+			stringstream ss;
+			ss << num;
+			string str = ss.str();
+			ss.str("");
+			ss.clear();
+			return str;
+		}
+		
+		int Convert_Dec( string str ) { // 16進位轉換成10進位 
+			int num;
+			istringstream( str ) >> hex >> num;
+			return num;
+		}
+		
+		string Hex_format( int radix, string str ) { // 字串轉16進位字串 
+			char ch[str.size()];
+			int num = atoi(str.c_str());
+			itoa( num, ch, radix );
+			string result;
+			result = ch;
+			transform(result.begin(), result.end(), result.begin(), ::toupper);
+			return result;
+		}
+
+		string itos_format( int radix, char ch ) {  
+			int num = ch;
+			char ch2[2];
+			itoa( num, ch2, radix );
+			string str = ch2;
+			return str;
+		}
+		
+};
+
+class Cutter {
+public:
+	CutType Cut( char ch ) { // 回傳字元的類型 
+		if ( ( ch == 32 || ch == 9 || ch == 10 ) ) {
+			if ( ch == 10 ) {
+				return Newline;
+			}
+			
+			return Space;
+		}
+		
+		else if ( ch == 35 || ch == 39 || ( ch >= 42 && ch <= 47) ||
+		          ch == 58 || ch == 59 || ch == 61 || ch == 63 || ch == 64 ) {
+			
+			if ( ch == 46 ) {
+				return Remark;	
+			}
+			
+			else {
+				return Special;
+			}
+		}
+		
+		else if ( ch >= 48 & ch <= 57 ) {
+			return Number;
+		}
+		
+		else {
+			return Other;
+		}		
+	}
+};
+
+class Table {
+private:
+	fstream file;
+	Cutter cutter;
+	Converter convert;
+	vector< vector<string> > base_table; // Table1~Table4 
+	typedef struct tb {
+		string str; // 名稱 
+		int value; //  位置 
+	}table;
+	
+	typedef struct symTb {
+		string str; // 名稱
+		int value;
+		string address; // 地址
+	}symbolTb;
+	
+	typedef struct op {
+		string str; // 名稱 
+		string format; // 格式 
+		string opcode;  
+	}opTb;
+	
+	vector<table> num_table; // 數字表格
+	vector<symbolTb> literal_table;  
+	vector<symbolTb>sym_table; // 標籤表格含地址 
+	vector<table> symbol_table; // 標籤表格 
+	vector<table> string_table;  // 字串表格
+	vector<op> opcode_table; // OPTAB
+public:
+	void Bulid_base_table() { // 建立表格 
+		stringstream ss;
+		for ( int i = 1 ; i <= 4 ; i++ ) {
+			ss << i;
+			string num = ss.str();
+			string filename = "Table" + num + ".table";
+			file.open( filename.c_str(), ios::in );
+			if ( !file.fail() ) {
+				string line;
+				vector<string> record;
+				while ( !file.eof() && getline( file, line ) ) {
+					line.erase(line.find_last_not_of(' ')+1);
+					record.push_back( line );
+				}
+				
+				base_table.push_back( record );
+				record.clear();
+				file.close();
+				ss.str("");
+				ss.clear();
+			}
+			
+			else {
+				cout << filename << " 不存在!!!";
+			} 
+		}
+	}
+	
+	void Bulid_opcode_table() { // 建立OPCODETAB 
+		string name = "OPTABLE.txt";
+		file.open(name.c_str(), ios::in );
+		if ( file.fail() ) {
+			cout << "OPTABLE.txt讀入失敗!!!" << endl << endl;
+		}
+		
+		else {
+			string str;
+			string temp, cut;
+			opTb findOP;
+			int num = 0;
+			while ( getline(file,str) && !file.eof() ) {
+				int pos = str.find_first_of(" ");
+				int pre = 0;
+				findOP.str = str.substr(pre,pos-pre);
+				pre = pos + 1;
+				pos = str.find_last_of(" ");
+				findOP.format = str.substr(pre,pos-pre);
+				pre = pos + 1;
+				pos = str.find('\n',1);
+				findOP.opcode = str.substr(pre,pos-pre);
+				opcode_table.push_back(findOP);
+			}
+			
+			file.close();
+		}
+	}
+	
+	string Get_opcode( string str ) { // 取得OPCODE 
+		for ( int i = 0 ; i < opcode_table.size() ; i++ ) {
+			if ( Compare( str, opcode_table[i].str) ) {
+				return opcode_table[i].opcode;
+			}
+		}
+
+		return "NO";
+	}
+	
+	void push_in_literal_table( string str ) { // 建立literal 
+		symTb temp;
+		temp.str = str;
+		temp.address = "-1";
+		int total = 0;
+		for ( int i = 0 ; i < str.size() ; i++ ) {
+			total = total + str[i];
+		}
+		
+		total = total%100;
+		temp.value = total; 
+		if ( literal_table.size() == 0 ) {
+			literal_table.push_back(temp);
+		}
+		
+		else {
+			for ( int i = 0 ; i < literal_table.size() ; i++ ) {
+				if ( literal_table[i].value == temp.value ) {
+					temp.value++;
+					if ( temp.value > 99 ) {
+						temp.value = 0;
+						i = -1;
+					}
+				}
+			}
+			
+			literal_table.push_back(temp);
+		}
+	}
+	
+	string Get_register( string str ) { // 取得暫存器編號 
+		int i = 0;
+		for ( i = 0 ; i < base_table[2].size() ; i++ ) {
+			if ( Compare( str,base_table[2][i] ) ) {
+				return convert.itos(i);
+			}
+		}
+	}
+	
+	string Get_format( string str ) { // 取得指令形式 
+		for ( int i = 0 ; i < opcode_table.size() ; i++ ) {
+			if ( Compare( str, opcode_table[i].str) ) {
+				return opcode_table[i].format;
+			}
+		}
+		
+		return "NO";		
+	}
+	
+	bool Exist_In_sym_table( string str ) { // 重複標籤 
+		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
+			if ( Compare( sym_table[i].str, str) ) {
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	string Get_Address( string str ) {  // 取得symbol的地址 
+		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
+			if ( Compare( sym_table[i].str, str) ) {
+				return sym_table[i].address;
+			}
+		}
+		
+		return "NO";
+	}
+
+	void Set_literal_table( int pc ) { // 設定literal表格 
+		for ( int i = 0 ; i < literal_table.size() ; i++ ) {
+			if ( literal_table[i].address == "-1" ) {
+				literal_table[i].address = convert.itos(pc);
+				pc = pc + 3;
+			}
+		}
+	}
+	
+	string Get_literal_address( string str ) { // 取得literal地址 
+		for ( int i = 0 ; i < literal_table.size() ; i++ ) {
+			if ( str == literal_table[i].str ) {
+				return literal_table[i].address;
+			}
+		}
+		
+		return "NO";
+	}
+	
+	void Set_sym_table( int valueOfTable, string address, string str ) {  // 設定symbol表格(含地址) 
+		symTb temp;
+		temp.str = str;
+		temp.address = address;
+		temp.value = valueOfTable;
+		if ( sym_table.size() == 0 ) {
+			sym_table.push_back(temp);
+		}
+		
+		else {
+			for ( int i = 0 ; i < sym_table.size() ; i++ ) {
+				if ( sym_table[i].value == temp.value ) {
+					temp.value++;
+					if ( temp.value > 99 ) {
+						temp.value = 0;
+						i = -1;
+					}
+				}
+			}
+			
+			sym_table.push_back(temp);
+		}
+	}
+	
+	void Relocation( int pc ) { // 重定位 
+		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
+			if ( sym_table[i].str.size() != 0 ) {
+				int newadr = atoi(sym_table[i].address.c_str());
+				newadr = newadr + pc;
+				sym_table[i].address = convert.itos(newadr);
+			}
+			
+			else {
+				break;
+			}
+		}	
+	}
+	
+	void Specific_Relocation( string str, string adr) {
+		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
+			if ( sym_table[i].str == str ) {
+				sym_table[i].address = adr;
+				break;
+			}
+		}		
+	}
+	
+	bool Compare( string str, string str2 ) { // 比較是否為相同指令 
+		transform(str.begin(),str.end(),str.begin(), ::toupper);
+		transform(str2.begin(),str2.end(),str2.begin(), ::toupper);		
+		if ( str == str2 ) {
+			return true;
+		}
+		
+		else {
+			return false;
+		}
+	}
+	
+	// 將詞塊放到表格上，可能發生衝突  
+	void SetInTable( int & num, vector<table> & goal, string find ) {
+		if ( goal.size() != 0 ) {
+			for ( int i = 0 ; i < goal.size() ; i++ ) {
+				if ( find == goal[i].str ) { // 找到對應的詞塊 
+					break;
+				}
+				
+				else if ( num == goal[i].value ) { // 發生衝突 
+					num++;
+					if ( num > 99 ) { // 超出範圍，從表格開頭開始找起 
+						num = 0;
+						i = -1;
+					}
+				}
+			}
+		}
+		
+		table t;
+		t.str = find;
+		t.value = num;
+		goal.push_back( t );
+	}
+	bool is_number(const std::string& s) {
+	    std::string::const_iterator it = s.begin();
+	    while (it != s.end() && std::isdigit(*it)) ++it;
+	    return !s.empty() && it == s.end();
+	}
+	
+	// 找到詞塊對應表格的位置 
+	void Find_Token( string goal, int & numOftable, int & valueOftable, CutType status ) {
+		bool iSfind = false;
+		// 先從Table1~Table4開始尋找對應的詞塊 //
+		if ( status != String && status != Hex ) {
+			for ( int i = 0 ; i < base_table.size() && !iSfind ; i++ ) {
+				for ( int j = 0 ; j < base_table[i].size() ; j++ ) {
+					if ( Compare( goal, base_table[i][j] ) ) {
+						numOftable = i+1;
+						valueOftable = j+1;
+						iSfind = true;
+						break;
+					}
+				}
+			}
+		}
+		
+		if ( !iSfind ) {  // 詞塊不在Table1~Table4 
+			int total = 0;
+			for ( int i = 0 ; i < goal.size() ; i++ ) {
+				total = total + goal[i];
+			}
+			
+			total = total % 100; 
+			if ( ( is_number(goal) || status == Hex ) && status != String ) { // 數字 
+				SetInTable( total, num_table, goal );
+				numOftable = 6;
+			}
+			
+			else if ( status == String ) { // 字串 
+				SetInTable( total, string_table, goal );
+				numOftable = 7;
+			}
+			
+			else { // 標籤 
+				SetInTable( total, symbol_table, goal );
+				numOftable = 5;
+			}
+			
+			valueOftable = total;
+		}
+	}
+	 
+	void Clear() { // 初始化 
+		for ( int i = 0 ; i < base_table.size() ; i++ ) {
+			for ( int j = 0 ; j < base_table[i].size() ; j++ ) {
+				base_table[j].clear();
+			}
+			
+			base_table[i].clear();
+		}
+		
+		base_table.clear();
+		for ( int i = 0 ; i < num_table.size() ; i++ ) {
+			num_table[i].str.clear();
+			num_table[i].value = 0;	
+		}
+		
+		num_table.clear();
+		for ( int i = 0 ; i < symbol_table.size() ; i++ ) {
+			symbol_table[i].str.clear();
+			symbol_table[i].value = 0;	
+		}
+		symbol_table.clear();
+		for ( int i = 0 ; i < sym_table.size() ; i++ ) {
+			sym_table[i].str.clear();
+			sym_table[i].address.clear();
+			sym_table[i].value = 0;
+		}
+		
+		sym_table.clear();
+		for ( int i = 0 ; i < string_table.size() ; i++ ) {
+			string_table[i].str.clear();
+			string_table[i].value = 0;	
+		}		
+		string_table.clear();
+		
+		for ( int i = 0 ; i < literal_table.size() ; i++ ) {
+			literal_table[i].str.clear();
+			literal_table[i].address.clear();
+			literal_table[i].value = 0;
+		}
+		
+		literal_table.clear(); 
+	}
+	
+};
+
+class Assembler {
+private:
+	
+	typedef struct tR {
+		string str; // 名稱 
+		int numOftable; // 所在的表格 
+		int valueOftable; // 所在的表格位置 
+		int line; // column in sourcecode 
+	}tokenRecord;
+	
+	typedef struct sR {
+		string str; // 原始程式碼 
+		string address; // 地址 
+		string machine_code; // 機器碼 
+	}sourceRecord;
+	
+	fstream file;
+	string filename;
+	Converter convert;
+	int pc; // 程式計數器 
+	Cutter cutter; // 字元處理
+	Table table; // 表格
+	vector<sourceRecord> source; // 原始程式碼
+	vector<tokenRecord> token_record; // 紀錄詞塊
+	
+public:
+	
+	Assembler() {
+		pc = 0;
+	}
+	
+	void Setfilename( string name ) { // 檔案名稱 
+		filename = name;	
+	}
+	
+	// 紀錄新的詞塊 // 
+	void Push_in_token_record( string & temp, int line, CutType status ) {  
+		tokenRecord token;
+		token.str = temp;
+		token.line = line;
+		table.Find_Token(temp,token.numOftable,token.valueOftable,status);
+		token_record.push_back(token);
+		temp.clear();
+	}
+	
+	// 紀錄一個或兩個詞塊 // 
+	void GetToken( string & temp, int line, CutType & status, char nextChar ) {
+		if ( temp.size() == 0 ) { // 一個詞塊
+			temp = temp + nextChar;
+			Push_in_token_record( temp,line, status );
+		}
+		
+		else { // 兩個詞塊
+			Push_in_token_record( temp,line, status );
+			temp = temp + nextChar;
+			if ( status == String || status == Hex ) {
+				status = Other;	
+			}
+			Push_in_token_record( temp,line, status );
+		}
+	}
+	
+	bool Lexical_Analysis( string filename ) { // 語彙分析 
+		file.open(filename.c_str(), ios::in );
+		if ( !file.fail() ) {
+			char nextChar = '\0';
+			string temp;
+			sourceRecord sourceOfLine;
+			sourceOfLine.address = "-1";
+			sourceOfLine.machine_code = "-1";
+			table.Bulid_base_table();
+			table.Bulid_opcode_table();
+			int charnum = 0,line = 0;
+			CutType status = Other;
+			while ( file.get(nextChar) ) {
+				CutType cut_type = cutter.Cut( nextChar );
+				// 空格或換行
+				if ( ( cut_type == Space || cut_type == Newline ) && ( status == Other )) {
+					if ( temp.size() != 0 ) {
+						Push_in_token_record( temp,line, status );
+					}
+				}
+				
+				else if ( cut_type == Remark && status == Other ) { // 註解 
+					GetToken( temp, line, status, nextChar );
+					status = Remark;
+				}
+				
+				// 特殊符號 && 字串 && 十六進位 
+				else if ( ( cut_type == Special && status == Other) ||
+						  ( nextChar == 39 && charnum == 1 ) ) {
+					string front;
+					if ( nextChar == 39 ) {
+						if ( ( temp == "C" || temp == "X" ) && charnum == 0 ) {
+							charnum++;
+							front = temp;
+							temp.clear();
+						}
+						
+						else if ( charnum == 1 )
+							charnum = 0;
+					}
+					
+					if ( temp.size() == 0 && charnum == 0 ) { // 空字串 
+						status = Other;	
+					}
+
+					GetToken( temp, line, status, nextChar );
+					if ( charnum == 1 && front == "C" )
+						status = String;
+					else if ( charnum == 1 && front == "X" ) {	
+						status = Hex;
+					}
+				}
+				
+				else if ( status != Remark ) { // 紀錄不是註解後的字元 
+					temp = temp + nextChar;
+				}
+				
+				if ( cut_type != Newline ) { // 紀錄原始程式碼當字元類型不是換行 
+					sourceOfLine.str = sourceOfLine.str + nextChar;
+				}
+				
+				else { // 遇到換行，新增一行原始程式碼
+					line++;
+					charnum = 0;
+					source.push_back(sourceOfLine);
+					sourceOfLine.str.clear();
+					status = Other;
+				}
+			}
+			
+			file.close();
+			
+			// 最後可能沒有碰到換行，處理最後一行程式碼以及最後一個詞塊 //  
+			if ( sourceOfLine.str.size() != 0 ) {
+				source.push_back(sourceOfLine);
+				sourceOfLine.str.clear();
+			}
+			
+			if ( temp.size() != 0 ) {
+				Push_in_token_record( temp,line, status );	
+			}
+			
+			// 最後可能沒有碰到換行，處理最後一行程式碼以及最後一個詞塊 //
+			
+			return true;
+		}
+		
+		else {
+			return false;
+		}
+	}
+	
+	string Middle( string str ) { // x、b、p、e bit 
+		int new_other = 0;
+		for ( int i = 0 ; i < 6 ; i++ ) {
+			if ( i == 2 && str[i] == '1' ) {
+				new_other = new_other + 8;
+			}
+			
+			else if ( i == 3 && str[i] == '1' ) {
+				new_other = new_other + 4;
+			}
+			
+			else if ( i == 4 && str[i] == '1' ) {
+				new_other = new_other + 2;
+			}
+			
+			else if ( i == 5 && str[i] == '1' ) {
+				new_other = new_other + 1;
+			}
+		}
+		
+		return convert.Hex_format(16,convert.itos(new_other));	
+	}
+	
+	string Front( string str ) { // n、i bit 
+		int new_other = 0;
+		for ( int i = 0 ; i < 2 ; i++ ) {
+			if ( i == 0 && str[i] == '1' ) {
+				new_other = new_other + 2;
+			}
+			
+			else if ( i == 1 && str[i] == '1' ) {
+				new_other = new_other + 1;
+			}
+		}
+		
+		return convert.Hex_format(16,convert.itos(new_other));			
+	}
+	
+	int Instr_Length(string instr ) {
+		string format_ = table.Get_format( instr );
+		if ( format_ == "1" ) {
+			return 1;
+		}
+		
+		else if ( format_ == "2" ) {
+			return 2;
+		}
+		
+		else {
+			return 3;
+		}
+	}
+	
+	string SICXE_Machine_Code( string opcode, string reg, string other, string adr, int line, 
+	                           string numOftable, string base_adr ) { // SIC機器碼 
+		string format = table.Get_format(opcode);
+		opcode = table.Get_opcode(opcode);
+		if ( format == "1" ) {
+			return opcode;
+		}
+		
+		else if ( format == "2" ) {
+			return opcode + reg;
+		}
+		
+		else if ( other[other.size()-1] == '0' ) {
+			if ( adr.size() != 0 && ( numOftable != "6" ) ) {
+				string temp = convert.itos( atoi(adr.c_str()) - atoi(source[line].address.c_str()));
+				string temp2 = convert.Hex_format(16,temp);
+				if ( temp2[temp2.size()-4] == 'F' || atoi(temp.c_str()) >= 0 ) {
+					other[other.size()-2] = '1';
+					adr = convert.Hex_format(16,temp);
+				}
+				
+				else if ( base_adr.size() != 0 ) {
+					other[3] = '1';
+					adr = convert.itos( atoi(adr.c_str()) - atoi(base_adr.c_str()));
+					adr = convert.Hex_format(16,adr);
+				}
+				
+				else {
+					cout << "<-Error Message-> Line: " + convert.itos(line);
+					if ( line+2 < 10 )
+						cout << " ";
+					cout << " Machine Code Translate Error!!!" << endl; 
+				}
+
+				string other2 = Middle( other );
+				string disp;
+				for ( int i = 0 ; i < adr.size() ; i++ ) {
+					if ( i >= 5 ) {
+						disp = disp + adr[i];
+					}
+				}
+				
+				if ( disp.size() == 0 ) {
+					disp = adr;
+				}
+				
+				disp = Add0(3,disp);
+				string combine = Add0(2,convert.Hex_format(16,convert.itos( convert.Convert_Dec(opcode) + atoi(Front(other).c_str()))));
+				return combine + other2 + disp;
+			}
+			
+			else {
+				string other2 = Middle( other );
+				adr = Add0(3,adr);
+				string combine = Add0(2,convert.Hex_format(16,convert.itos( convert.Convert_Dec(opcode) + atoi(Front(other).c_str()))));
+				return combine + other2 + adr;
+			}
+		}
+		
+		else {
+			if ( base_adr.size() != 0 && other[2] == '1' ) {
+				adr = base_adr;
+				other[3] = '1';
+			}
+			adr = Add0(4,convert.Hex_format(16,adr));
+			adr = "0" + adr;
+			string other2 = Middle( other );
+			string combine = Add0(2,convert.Hex_format(16,convert.itos( convert.Convert_Dec(opcode) + atoi(Front(other).c_str()))));
+			return combine + other2 + adr;
+			
+		}
+	
+		return "0";
+	}
+		
+	string Add0( int s, string str ) { // 補零 
+		if ( str.size() < s ) {
+			string front;
+			for ( int i = 0 ; i < s - str.size() ; i++ ) {
+				front = front + "0";
+			}
+			
+			str = front + str;
+			return str;
+		}
+		
+		return str;
+	}
+	
+	void Relocation_Line( int x ) {
+		for ( int j = 0 ; j < token_record.size() ; j++ ) {
+			if ( x >= token_record[j].line ) {
+				token_record[j].line++;
+			}
+		}
+	}
+	
+	void Assign_Address( string type ) { // 算出每個指令的地址( Pass 1 )
+		sourceRecord ltr;
+		for ( int x = 0 ; x < source.size() ; x++ ) {
+			int tokennum = 1, point = 0;
+			bool literal = false, label = false;
+			for ( int j = 0 ; j < token_record.size() && 
+			      !table.Compare(token_record[j].str,"END") ; j++ ) {
+				if ( x == token_record[j].line && source[x].str.size() != 0 && 
+				     source[x].machine_code == "-1" ) {
+				     //	cout << token_record[j].str << endl;
+					if ( token_record[j].str == "." && tokennum == 1  && token_record[j].numOftable == 4 ) {
+						break;
+					}
+					
+					else if ( token_record[j].str == "."  && token_record[j].numOftable == 4 ) {
+						;
+					}
+					
+					else if ( table.Compare(token_record[j].str,"BASE") ) {
+						break;
+					}
+										
+					else if ( table.Compare(token_record[j].str,"LTORG") ) {
+						table.Set_literal_table(pc);
+						ltr.address = convert.itos(pc);
+						source.insert(source.begin()+x+1,ltr);
+						Relocation_Line( x+1 );
+						x++;
+						pc = pc + ( ltr.machine_code.size() / 2);
+						ltr.str.clear();
+						ltr.address.clear();
+						ltr.machine_code.clear();
+					}
+					
+					else if ( source[x].address == "-1" ) {
+						string adr = convert.itos(pc);
+						source[x].address = Add0(4,adr);
+					}
+					
+					if ( token_record[j].numOftable == 5 && tokennum == 1 ) {
+//						cout << token_record[j].str << " " <<  convert.Hex_format(16,convert.itos(pc)) << endl;
+						string adr = convert.itos(pc);
+						label = true;
+						if ( !table.Exist_In_sym_table(token_record[j].str) ) {
+							  table.Set_sym_table(token_record[j].valueOftable,
+							                      adr,
+												  token_record[j].str);
+						}
+						
+						else {
+							cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Duplicated Symbol"; 
+						}
+					}
+
+					else if ( token_record[j].str[0] == 39 && 
+					          ( ( tokennum == 4 || tokennum == 2 ) || ( tokennum == 5 || tokennum == 3 ) ||
+							    ( tokennum == 6 || tokennum == 4 ) ) ) {
+						point++;
+					}
+										
+					else if (token_record[j].numOftable == 4 && token_record[j].str == "=" &&
+					          ( tokennum == 3 || tokennum == 2 ) ) {
+						literal = true;
+					}
+					
+					else if ( literal && ( tokennum == 4 || tokennum == 3 || tokennum == 5 ) ) {
+						table.push_in_literal_table(token_record[j].str);
+						ltr.str = token_record[j].str;
+						if ( token_record[j].numOftable == 7 ) {
+							ltr.str = "*\t=C'"+ token_record[j].str + "'";
+							string temp;
+							for ( int g = 0 ; g < token_record[j].str.size() ; g++ ) {
+								char ch = token_record[j].str[g];
+								string ch2 = convert.itos_format(16,ch);
+								temp = temp + ch2;
+							}
+							
+							ltr.machine_code = temp;
+						}
+						
+						else if ( token_record[j].numOftable == 6 ) {
+							ltr.machine_code = token_record[j].str;
+						}
+					}
+					
+					else if ( table.Compare(token_record[j].str,"START") ) {
+						if ( token_record[j+1].numOftable == 6 &&
+						     token_record[j+1].line == x ) {
+							int num = convert.Convert_Dec(token_record[j+1].str);
+							pc = pc + num;
+							for ( int i = x ; i < source.size() ; i++ ) {
+								if ( i <= token_record[j].line ) {
+									int newadr = atoi(source[i].address.c_str());
+									newadr = newadr + pc;
+									source[i].address = convert.itos(newadr);
+								}
+								
+								else {
+									break;
+								}
+							}
+							
+							table.Relocation(pc);
+							j++; 
+						}
+						
+						else {
+							cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
+						}
+						
+					}
+					
+					else if ( table.Compare(token_record[j].str,"WORD") ||
+							  table.Compare(token_record[j].str,"EQU" ) ||
+					          token_record[j].numOftable == 1 ) {
+					    if ( token_record[j].numOftable == 1 && type == "SICXE" ) {
+					    	if ( token_record[j-1].line == x && token_record[j-1].str == "+" && token_record[j-1].numOftable == 4 ) 
+					    		pc = pc + 4;
+					    	else if ( token_record[j-1].line == x && token_record[j-1].str != "+" 
+							          && token_record[j-1].numOftable == 4 ) {
+					    		cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
+					    	}
+					    	else {
+					    		pc = pc + Instr_Length(token_record[j].str);
+					    	}
+						}
+						
+						else if ( table.Compare(token_record[j].str,"EQU" ) ) {
+							string op1,op2,opr;
+							for ( int g = j + 1;  g < token_record.size() ; g++ ) {
+								if ( token_record[g].line == x ) {
+									if ( token_record[g].numOftable == 5 ) {
+										if ( op1.size() == 0 ) {
+											op1 = table.Get_Address(token_record[g].str );
+										}
+										
+										else if ( op2.size() == 0 ) {
+											op2 = table.Get_Address(token_record[g].str );
+										}
+									}
+									
+									else if ( token_record[g].numOftable == 6 ) {
+										op1 = token_record[g].str;
+									}
+									
+									else if ( token_record[g].numOftable == 4 ) {
+										opr = token_record[g].str;
+									}
+								}
+							}
+							
+							
+							bool escape = false;
+							if ( opr == "*" && op1.size() == 0 && op2.size() == 0 )
+								escape = true;
+															
+							else if ( opr == "+" ) {
+								source[x].address = convert.itos( atoi( op1.c_str() ) + atoi(op2.c_str() ));
+							}
+
+							else if ( opr == "-" ) {
+								source[x].address = convert.itos( atoi( op1.c_str() ) - atoi(op2.c_str() ));
+							}
+							
+							else if ( opr == "*" ) {
+								source[x].address = convert.itos( atoi( op1.c_str() ) * atoi(op2.c_str() ));
+							}
+
+							else if ( opr == "/" ) {
+								source[x].address = convert.itos( atoi( op1.c_str() ) / atoi(op2.c_str() ));
+							}
+							
+							else {
+								source[x].address = op1;
+							}
+							
+							if ( !escape ) {
+								int g = j;
+								for ( g = g;  g < token_record.size() ; g-- ) {
+									if ( token_record[g-1].line != x ) {
+										break;
+									}
+								}
+								
+								if ( token_record[g].numOftable == 5 ) {
+									table.Specific_Relocation( token_record[g].str,source[x].address );
+								}
+							}
+						}
+						else {
+							pc = pc + 3;
+						}
+					}
+					
+					else if ( table.Compare(token_record[j].str,"RESW") ) {
+						if ( token_record[j+1].numOftable == 6 && 
+						     token_record[j+1].line == x ) {
+							int num = atoi(token_record[j+1].str.c_str());
+							num = num * 3;
+							pc = pc + num;
+							j++;
+						}
+						
+						else {
+							cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
+						}
+					}
+					
+					else if ( table.Compare(token_record[j].str,"RESB") ) {
+						if ( token_record[j+1].numOftable == 6 &&
+						     token_record[j+1].line == x ) {
+							int num = atoi(token_record[j+1].str.c_str());
+							pc = pc + num;
+							j++;
+						}
+						
+					}
+					
+					else if ( table.Compare(token_record[j].str,"BYTE") ) {
+						if ( token_record[j+2].numOftable == 7 &&
+						     token_record[j+2].line == x ) {
+							int length = token_record[j+2].str.size();
+							pc = pc + length;
+							j = j + 2;
+						}
+						
+						else if ( token_record[j+2].numOftable == 6 &&
+						          token_record[j+2].line == x ) {
+							int length = token_record[j+2].str.size() / 2;
+							pc = pc + length;
+							j = j + 2;
+						}
+						
+						else {
+							cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
+						}
+
+					}
+					
+					if ( table.Compare(token_record[j].str,"WORD") || 
+						 table.Compare(token_record[j].str,"RESB") || 
+						 table.Compare(token_record[j].str,"RESW") ) {
+						if ( !table.is_number(token_record[j+1].str) && token_record[j+1].line != x  ) {
+							cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
+						}
+					}
+					tokennum++;
+					
+				}
+				
+				/*else if ( source[x].machine_code != "-1" ) {
+					break;
+				}*/ 
+				
+				/*else if ( !escape ) {
+					escape = true;
+				}*/
+				
+				else if ( x < token_record[j].line ) {
+					break;
+				}
+				
+				else if ( source[x].str.size() == 0 ) {
+					break;
+				}
+
+				else if ( table.Compare(token_record[j+1].str,"END") ) {
+					table.Set_literal_table(pc);
+					ltr.address = convert.itos(pc);
+					source.insert(source.begin()+x+1,ltr);
+					pc = pc + ( ltr.machine_code.size() / 2);
+					ltr.str.clear();
+					ltr.address.clear();
+					ltr.machine_code.clear();
+				}
+				
+				else if ( point % 2 != 0 ) {
+					cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
+				}
+			}
+		}
+		 
+	}
+	
+	int Find_Next_Pc( int i ) {
+		for ( int j = i+1 ; j < source.size() ;j++ ) {
+			if ( source[j].address != "-1" ) {
+				return j;
+			}
+		}
+		
+		return -200;
+	}
+	
+	void Generate_Machine_Code( string type ) { // 產生機器碼( Pass 2 ) 
+		bool base = false;
+		string base_adr;
+		for ( int line = 0 ; line < source.size() ; line++ ) {
+			int tokennum = 1, point = 0;
+			string numOftable = "-1";
+			string adr_s,opcode,r1,r2,n = "0",i = "0",x = "0",b = "0",p = "0",e = "0";
+			if ( type == "SICXE") {
+				n = "1";
+				i = "1";
+			}
+			bool byte = false, operand = false, literal = false, comma = false, escape = false;
+			for ( int j = 0 ; j < token_record.size() ; j++ ) {
+				if ( line == token_record[j].line && source[line].machine_code == "-1" ) {
+					if ( table.Compare(token_record[j].str,"START") || 
+					     table.Compare(token_record[j].str,"RESW") || 
+						 table.Compare(token_record[j].str,"RESB") ||
+						 table.Compare(token_record[j].str,"END") ||
+						 table.Compare(token_record[j].str,"EQU") || 
+						 table.Compare(token_record[j].str,"LTORG")) {
+						break;
+					}
+					
+					else if ( tokennum == 1 && token_record[j].str == "." ) {
+						break;
+					}
+
+					else if ( token_record[j].str == "."  && token_record[j].numOftable == 4 ) {
+						;
+					}
+					
+					else if ( token_record[j].numOftable == 5 && tokennum == 1 ) {
+						;	
+					}
+					
+					else if ( token_record[j].str[0] == 39 && 
+					          ( ( tokennum == 4 || tokennum == 2 ) || ( tokennum == 5 || tokennum == 3 ) ||
+							    ( tokennum == 6 || tokennum == 4 ) ) ) {
+						point++;
+					}
+					
+					else if ( token_record[j].numOftable == 4 && token_record[j].str == "=" &&
+					          ( tokennum == 3 || tokennum == 2 ) ) {
+						literal = true;
+					}
+					
+					else if ( literal && ( tokennum == 4 || tokennum == 3 || tokennum == 5 ) ) {
+						if ( token_record[j].numOftable == 7 ) {
+							adr_s = table.Get_literal_address(token_record[j].str);
+							p = "1";
+							j++;
+						}
+						
+						else if ( token_record[j].numOftable == 6 ) {
+							adr_s = table.Get_literal_address(token_record[j].str);
+							p = "1";
+						}
+						
+						else {
+							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+						}
+					}
+					
+					else if ( table.Compare(token_record[j].str,"BASE") && 
+					          token_record[j].numOftable == 2 && ( tokennum == 2 || tokennum == 1 ) ) {
+					    if ( token_record[j+1].numOftable == 5 ) {
+					    	escape = true;
+					    	base_adr = table.Get_Address( token_record[j+1].str);
+					    	if ( base_adr == "NO")
+					    		cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Undefined Symbol!!!\n";
+						    base = true;
+							j++;
+						}
+						
+						else {
+							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+						}
+					}
+					
+					else if ( token_record[j].numOftable == 4 && token_record[j].str == "#" && ( tokennum == 3 || tokennum == 2 )) {
+						i = "1";
+						n = "0";
+					}
+					
+					else if ( token_record[j].numOftable == 4 && token_record[j].str == "@" && ( tokennum == 3 || tokennum == 2 )) {
+						n = "1";
+						i = "0";
+					}
+					
+					else if ( token_record[j].str == "+" && token_record[j].numOftable == 4 &&
+					          type == "SICXE" && ( tokennum == 1 || tokennum == 2 ) ) {
+						e = "1";	
+					}
+					
+					else if ( token_record[j].str == "," && token_record[j].numOftable == 4 && ( tokennum == 3 || tokennum == 4 )) {
+						comma = true;
+					}
+					
+					else if ( token_record[j].numOftable == 3 && ( tokennum == 3 || tokennum == 2 || tokennum == 4 || tokennum == 5 ) ) {
+						string temp = table.Get_register(token_record[j].str);
+						x = "1";
+						if ( type == "SICXE") {
+							if ( r1.size() == 0 ) {
+								r1 = temp;
+							}
+							
+							else if ( r2.size() == 0 && comma ) { 
+								r2 = temp;
+							}
+							
+							else {
+								cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+							}
+						}
+					}
+					
+					else if ( token_record[j].numOftable == 5 && ( tokennum == 3 || tokennum == 2 || tokennum == 4 || tokennum == 5 )) {
+						if ( adr_s.size() == 0 ) {
+							operand = true;
+							adr_s = table.Get_Address(token_record[j].str);							
+							if ( adr_s == "NO" ) {
+								cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Undefined Symbol!!!\n";
+							}
+						}
+						
+						else {
+							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+						}
+					}
+					
+					else if ( token_record[j].numOftable == 1 && ( tokennum == 1 || tokennum == 2 || tokennum == 3 )) {
+						if ( opcode.size() == 0 && type == "SIC" )
+							opcode = table.Get_opcode(token_record[j].str);
+						else if ( opcode.size() == 0 && type == "SICXE" )
+							opcode = token_record[j].str;
+						else
+							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+					}
+					
+					else if ( table.Compare(token_record[j].str,"WORD") && ( tokennum == 1 || tokennum == 2 ) ) {
+						opcode = "00";
+					}
+					
+					else if ( table.Compare(token_record[j].str,"BYTE") && ( tokennum == 1 || tokennum == 2 ) ) {
+						byte = true;
+					}
+					
+					else if ( token_record[j].numOftable == 6 && byte && !operand) {
+						operand = true;
+						source[line].machine_code = token_record[j].str;
+					}
+					
+					else if ( token_record[j].numOftable == 6 && opcode == "00" && !operand) {
+						operand = true;
+						source[line].machine_code = opcode + 
+						                         Add0(4,convert.Hex_format(16,token_record[j].str));	
+					}
+					
+					else if ( token_record[j].numOftable == 7 && byte && !operand ) {
+						operand = true;
+						string temp;
+						for ( int g = 0 ; g < token_record[j].str.size() ; g++ ) {
+							char ch = token_record[j].str[g];
+							string ch2 = convert.itos_format(16,ch);
+							temp = temp + ch2;
+						}
+						source[line].machine_code = temp;
+					}
+					
+					else if ( token_record[j].numOftable == 6 && !operand ) {
+						operand = true;
+						adr_s = token_record[j].str;
+						numOftable = "6";
+					}
+					
+					else {
+						cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+					}
+					
+					tokennum++;
+					if ( source[line].machine_code == "-1" && line != token_record[j+1].line && type == "SIC") {
+						if ( x != "0" && opcode.size() != 0 ) {
+							adr_s = convert.itos(atoi( convert.Hex_format(16,adr_s).c_str()) + 8000);
+							source[line].machine_code = opcode + adr_s;
+						}
+						
+						else if ( x == "0" && opcode.size() != 0  ) {
+							source[line].machine_code = opcode + Add0(4,convert.Hex_format(16,adr_s));
+						}
+						
+						else {
+							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+						}
+					}
+					
+					else if ( source[line].machine_code == "-1" && line != token_record[j+1].line && type == "SICXE" ) {
+						if ( r1.size() == 0 && r2.size() != 0 ) {
+							Add0(4,r2);
+						}
+						
+						else if (r1.size() != 0 && r2.size() == 0) {
+							r1 = r1 + "0";
+						}
+						
+						if ( opcode.size() != 0 ) {
+							string reg = r1+r2;
+							string other = n+i+x+b+p+e;
+							source[line].machine_code = SICXE_Machine_Code( opcode, reg, other, 
+							                                                adr_s, Find_Next_Pc(line), numOftable,
+																			base_adr );
+						}
+						
+						else if ( !escape ) {
+							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+						}
+					}
+				}
+
+				/*else if ( source[line].machine_code != "-1" ) {
+					break;
+				}*/ 
+				
+				else if ( line < token_record[j].line ) {
+					break;
+				}
+
+				else if ( source[line].str.size() == 0 ) {
+					break;
+				}
+			}
+		}
+	}
+	
+	void Out_File( string type ) {
+		string out_name;
+		// 取得標準檔案名稱 //  
+		for ( int i = 0 ; i < filename.size() ; i++ ) {
+			if ( filename[i] != '.' ) {
+				out_name = out_name + filename[i];
+			}
+			
+			else {
+				break;
+			}
+		}
+		
+		out_name = out_name + "_output.txt";
+		// 取得標準檔案名稱 //  
+		file.open( out_name.c_str(), ios::out );
+		int line = 5;
+		if ( type == "SIC" )
+			file << "Line\tLoc\tSource statement\t\tObject code\n";
+		else {
+			file << "Line  Location  Source code                              Object code\n";
+			file << "----  -------- -------------------------                 -----------\n";
+		}
+		for ( int i = 0 ; i < source.size() ; i++ ) {
+			if ( source[i].str.size() != 0 ) {
+				if ( line < 10 ) {
+					file << "  ";
+				}
+				
+				else if ( line < 100 ) {
+					file << " ";
+				}
+				
+				file << line << "\t";
+				if ( source[i].address != "-1" ) {
+					file << Add0(4,convert.Hex_format(16,source[i].address)) << "\t";
+				}
+				
+				else {
+					file << "\t";
+				}
+				
+				file << source[i].str;
+				if ( type == "SICXE" )
+					file << "\t\t";
+				int tokennum = 0;
+				for ( int j = 0 ; j < token_record.size() ; j++ ) {
+					if ( token_record[j].line == i ) {
+						tokennum++;
+					}
+				}
+				
+				if ( tokennum <= 2 ) {
+					file << "\t";
+				}
+				
+				if ( source[i].machine_code != "-1" ) {
+					string str = source[i].machine_code;
+					transform(str.begin(), str.end(), str.begin(), ::toupper);
+					if ( source[i].str.find_first_of("\t") == 0 && tokennum > 3 ) {
+						file << "\t" << str;
+					}
+					else				
+						file << "\t\t" << str;
+				}
+				
+				line = line + 5;
+			}
+			
+			file << endl;
+		}
+		
+		cout << endl << out_name << " 已經輸出!!!\n" << endl; 
+		file.close();
+	}
+	
+	void Clear() { // 初始化 
+		table.Clear();
+		for ( int i = 0 ; i < source.size() ; i++ ) {
+			source[i].str.clear();
+			source[i].address.clear();
+			source[i].machine_code.clear();
+		}
+		
+		source.clear();
+		token_record.clear();
+		pc = 0;
+	}
+	
+};
+
+int main(void) {
+	Assembler assembler;
+	Table table;
+	Converter convert;
+	string name;
+	while ( true ) {
+		cout << "****** Cross Assembler ******\n"
+			 << "**     [1].SIC指令         **\n"
+			 << "**     [2].SICXE指令       **\n"
+			 << "**     [other].離開        **\n"
+			 << "*****************************\n"
+			 << ">";
+		int command = -1;
+		cin >> command ;
+		if ( command == 1 ) {
+			cout << endl;
+			while ( true ) {
+				cout << "輸入檔案名稱[0.離開]:";
+				cin >> name;
+				if ( name != "0" ) {
+					assembler.Setfilename(name);
+					if ( !assembler.Lexical_Analysis(name) ) {
+						cout << endl << name << " 不存在!!!\n" << endl;
+					}
+					
+					else {
+						assembler.Assign_Address("SIC");
+						assembler.Generate_Machine_Code("SIC");
+						assembler.Out_File("SIC");
+						assembler.Clear();
+						break;
+					}
+				}
+				
+				else if ( name == "0" ) {
+					break;
+				}
+			}
+			
+		}
+		
+		else if ( command == 2 ) {
+			cout << endl;
+			while ( true ) {
+				cout << "輸入檔案名稱[0.離開]:";
+				cin >> name;
+				if ( name != "0" ) {
+					assembler.Setfilename(name);
+					if ( !assembler.Lexical_Analysis(name) ) {
+						cout << endl << name << " 不存在!!!\n" << endl;
+					}
+					
+					else {
+						assembler.Assign_Address("SICXE");
+						assembler.Generate_Machine_Code("SICXE");
+						assembler.Out_File("SICXE");
+						assembler.Clear();
+						break;
+					}
+				}
+				
+				else if ( name == "0" ) {
+					break;
+				}
+			}			
+		}
+		
+		else {
+			break;
+		}
+		
+		name.clear();
+		cout << endl;
+	}
+	
+	cout << "\n****** 程式結束!!! ******\n";
+}
