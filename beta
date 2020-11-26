@@ -100,6 +100,7 @@ private:
 	typedef struct symTb {
 		string str; // 名稱
 		int value;
+		string machine_code;
 		string address; // 地址
 	}symbolTb;
 	
@@ -183,13 +184,22 @@ public:
 		return "NO";
 	}
 	
-	void push_in_literal_table( string str ) { // 建立literal 
+	string Get_literal_address( int i ) {
+		return literal_table[i].address;	
+	}
+
+	string Get_literal_mac( int i ) {
+		return literal_table[i].machine_code;	
+	}
+		
+	void push_in_literal_table( string address, string machine_code, string str ) { // 建立literal
 		symTb temp;
+		temp.address = address;
+		temp.machine_code = machine_code;
 		temp.str = str;
-		temp.address = "-1";
 		int total = 0;
-		for ( int i = 0 ; i < str.size() ; i++ ) {
-			total = total + str[i];
+		for ( int i = 0 ; i < temp.str.size() ; i++ ) {
+			total = total + temp.str[i];
 		}
 		
 		total = total%100;
@@ -199,8 +209,14 @@ public:
 		}
 		
 		else {
+			bool dup = false;
 			for ( int i = 0 ; i < literal_table.size() ; i++ ) {
 				if ( literal_table[i].value == temp.value ) {
+					if ( literal_table[i].str == temp.str ) {
+						dup = true;
+						break;
+					}
+					
 					temp.value++;
 					if ( temp.value > 99 ) {
 						temp.value = 0;
@@ -209,7 +225,8 @@ public:
 				}
 			}
 			
-			literal_table.push_back(temp);
+			if ( !dup )
+				literal_table.push_back(temp);
 		}
 	}
 	
@@ -252,13 +269,15 @@ public:
 		return "NO";
 	}
 
-	void Set_literal_table( int pc ) { // 設定literal表格 
+	int Set_literal_table( int adr ) { // 設定literal表格 
 		for ( int i = 0 ; i < literal_table.size() ; i++ ) {
 			if ( literal_table[i].address == "-1" ) {
-				literal_table[i].address = convert.itos(pc);
-				pc = pc + 3;
+				literal_table[i].address = convert.itos(adr);
+				adr = adr + ( literal_table[i].machine_code.size() / 2 );
 			}
 		}
+		
+		return adr;
 	}
 	
 	string Get_literal_address( string str ) { // 取得literal地址 
@@ -269,6 +288,14 @@ public:
 		}
 		
 		return "NO";
+	}
+	
+	string Get_literal_str( int i ) {
+		return literal_table[i].str;
+	}
+	
+	int Get_literal_table_size() {
+		return literal_table.size();
 	}
 	
 	void Set_sym_table( int valueOfTable, string address, string str ) {  // 設定symbol表格(含地址) 
@@ -401,7 +428,17 @@ public:
 			valueOftable = total;
 		}
 	}
-	 
+	
+	void Ltr_Clear() {
+		for ( int i = 0 ; i < literal_table.size() ; i++ ) {
+			literal_table[i].str.clear();
+			literal_table[i].address.clear();
+			literal_table[i].value = 0;
+		}
+		
+		literal_table.clear();
+	}
+	
 	void Clear() { // 初始化 
 		for ( int i = 0 ; i < base_table.size() ; i++ ) {
 			for ( int j = 0 ; j < base_table[i].size() ; j++ ) {
@@ -433,16 +470,11 @@ public:
 		for ( int i = 0 ; i < string_table.size() ; i++ ) {
 			string_table[i].str.clear();
 			string_table[i].value = 0;	
-		}		
+		}
+			
 		string_table.clear();
 		
-		for ( int i = 0 ; i < literal_table.size() ; i++ ) {
-			literal_table[i].str.clear();
-			literal_table[i].address.clear();
-			literal_table[i].value = 0;
-		}
-		
-		literal_table.clear(); 
+		Ltr_Clear() ;
 	}
 	
 };
@@ -456,6 +488,13 @@ private:
 		int valueOftable; // 所在的表格位置 
 		int line; // column in sourcecode 
 	}tokenRecord;
+	
+	typedef struct symTb{
+		int value;
+		string address;
+		string machine_code;
+		string str;
+	}symbolTb;
 	
 	typedef struct sR {
 		string str; // 原始程式碼 
@@ -751,8 +790,27 @@ public:
 		}
 	}
 	
+	void Source_Insert( int x ) {
+		int add = table.Get_literal_table_size();
+		int g = 1;
+		for ( int i = 0 ; i < add ; i++ ) {
+			sourceRecord newR;
+			newR.str = table.Get_literal_str(i);
+			newR.address = table.Get_literal_address(i);
+			newR.machine_code = table.Get_literal_mac(i);
+			source.insert(source.begin()+x+g,newR);
+			g++;
+		}
+		
+		table.Ltr_Clear();
+		for ( int j = 0 ; j < token_record.size() ; j++ ) {
+			if ( x <= token_record[j].line ) {
+				token_record[j].line = token_record[j].line + add;
+			}
+		}
+	}
+	
 	void Assign_Address( string type ) { // 算出每個指令的地址( Pass 1 )
-		sourceRecord ltr;
 		for ( int x = 0 ; x < source.size() ; x++ ) {
 			int tokennum = 1, point = 0;
 			bool literal = false, label = false, escape = true;
@@ -773,14 +831,8 @@ public:
 					}
 										
 					else if ( table.Compare(token_record[j].str,"LTORG") ) {
-						table.Set_literal_table(pc);
-						ltr.address = convert.itos(pc);
-						source.insert(source.begin()+x+1,ltr);
-						Relocation_Line( x );
-						pc = pc + ( ltr.machine_code.size() / 2);
-						ltr.str.clear();
-						ltr.address.clear();
-						ltr.machine_code.clear();
+						pc = table.Set_literal_table(pc);
+						Source_Insert( x );
 					}
 					
 					else if ( source[x].address == "-1" ) {
@@ -789,7 +841,6 @@ public:
 					}
 					
 					if ( token_record[j].numOftable == 5 && tokennum == 1 ) {
-//						cout << token_record[j].str << " " <<  convert.Hex_format(16,convert.itos(pc)) << endl;
 						string adr = convert.itos(pc);
 						label = true;
 						if ( !table.Exist_In_sym_table(token_record[j].str) ) {
@@ -815,8 +866,9 @@ public:
 					}
 					
 					else if ( literal && ( tokennum == 4 || tokennum == 3 || tokennum == 5 ) ) {
-						table.push_in_literal_table(token_record[j].str);
+						symTb ltr;
 						ltr.str = token_record[j].str;
+						ltr.address = "-1";
 						if ( token_record[j].numOftable == 7 ) {
 							ltr.str = "*\t=C'"+ token_record[j].str + "'";
 							string temp;
@@ -836,6 +888,8 @@ public:
 							
 							ltr.machine_code = token_record[j].str;
 						}
+						
+						table.push_in_literal_table("-1",ltr.machine_code,ltr.str);
 					}
 					
 					else if ( table.Compare(token_record[j].str,"START") ) {
@@ -1012,13 +1066,8 @@ public:
 				}
 
 				else if ( table.Compare(token_record[j+1].str,"END") ) {
-					table.Set_literal_table(pc);
-					ltr.address = convert.itos(pc);
-					source.insert(source.begin()+x+1,ltr);
-					pc = pc + ( ltr.machine_code.size() / 2);
-					ltr.str.clear();
-					ltr.address.clear();
-					ltr.machine_code.clear();
+					pc = table.Set_literal_table(pc);
+					Source_Insert( x );
 				}
 				
 				else if ( point % 2 != 0 ) {
