@@ -99,6 +99,7 @@ private:
 	
 	typedef struct symTb {
 		string str; // 名稱
+		string name;
 		int value;
 		string machine_code;
 		string address; // 地址
@@ -111,7 +112,8 @@ private:
 	}opTb;
 	
 	vector<table> num_table; // 數字表格
-	vector<symbolTb> literal_table;  
+	vector<symbolTb> literal_table_buffer;
+	vector<symbolTb> literal_table;
 	vector<symbolTb>sym_table; // 標籤表格含地址 
 	vector<table> symbol_table; // 標籤表格 
 	vector<table> string_table;  // 字串表格
@@ -184,19 +186,26 @@ public:
 		return "NO";
 	}
 	
-	string Get_literal_address( int i ) {
-		return literal_table[i].address;	
+	void Push_Ltr() {
+		for ( int i = 0 ; i < literal_table_buffer.size() ; i++ ) {
+			literal_table.push_back( literal_table_buffer[i]);
+		}	
+	}
+	
+	string Get_literal_table_buffer_address( int i ) {
+		return literal_table_buffer[i].address;	
 	}
 
-	string Get_literal_mac( int i ) {
-		return literal_table[i].machine_code;	
+	string Get_literal_table_buffer_mac( int i ) {
+		return literal_table_buffer[i].machine_code;	
 	}
 		
-	void Push_in_literal_table( string address, string machine_code, string str ) { // 建立literal
+	void Push_in_literal_table_buffer( string address, string machine_code, string str, string name ) { // 建立literal
 		symTb temp;
 		temp.address = address;
 		temp.machine_code = machine_code;
 		temp.str = str;
+		temp.name = name;
 		int total = 0;
 		for ( int i = 0 ; i < temp.str.size() ; i++ ) {
 			total = total + temp.str[i];
@@ -204,15 +213,15 @@ public:
 		
 		total = total%100;
 		temp.value = total; 
-		if ( literal_table.size() == 0 ) {
-			literal_table.push_back(temp);
+		if ( literal_table_buffer.size() == 0 ) {
+			literal_table_buffer.push_back(temp);
 		}
 		
 		else {
 			bool dup = false;
-			for ( int i = 0 ; i < literal_table.size() ; i++ ) {
-				if ( literal_table[i].value == temp.value ) {
-					if ( literal_table[i].str == temp.str ) {
+			for ( int i = 0 ; i < literal_table_buffer.size() ; i++ ) {
+				if ( literal_table_buffer[i].value == temp.value ) {
+					if ( literal_table_buffer[i].str == temp.str ) {
 						dup = true;
 						break;
 					}
@@ -226,7 +235,7 @@ public:
 			}
 			
 			if ( !dup )
-				literal_table.push_back(temp);
+				literal_table_buffer.push_back(temp);
 		}
 	}
 	
@@ -269,11 +278,11 @@ public:
 		return "NO";
 	}
 
-	int Set_literal_table( int adr ) { // 設定literal表格 
-		for ( int i = 0 ; i < literal_table.size() ; i++ ) {
-			if ( literal_table[i].address == "-1" ) {
-				literal_table[i].address = convert.itos(adr);
-				adr = adr + ( literal_table[i].machine_code.size() / 2 );
+	int Set_literal_table_buffer( int adr ) { // 設定literal表格 
+		for ( int i = 0 ; i < literal_table_buffer.size() ; i++ ) {
+			if ( literal_table_buffer[i].address == "-1" ) {
+				literal_table_buffer[i].address = convert.itos(adr);
+				adr = adr + ( literal_table_buffer[i].machine_code.size() / 2 );
 			}
 		}
 		
@@ -282,7 +291,7 @@ public:
 	
 	string Get_literal_address( string str ) { // 取得literal地址 
 		for ( int i = 0 ; i < literal_table.size() ; i++ ) {
-			if ( str == literal_table[i].str ) {
+			if ( str == literal_table[i].name ) {
 				return literal_table[i].address;
 			}
 		}
@@ -290,12 +299,16 @@ public:
 		return "NO";
 	}
 	
-	string Get_literal_str( int i ) {
-		return literal_table[i].str;
+	string Get_literal_table_buffer_str( int i ) {
+		return literal_table_buffer[i].str;
 	}
 	
-	int Get_literal_table_size() {
-		return literal_table.size();
+	string Get_literal_table_buffer_name( int i ) {
+		return 	literal_table_buffer[i].name;
+	} 
+	
+	int Get_literal_table_buffer_size() {
+		return literal_table_buffer.size();
 	}
 	
 	void Set_sym_table( int valueOfTable, string address, string str ) {  // 設定symbol表格(含地址) 
@@ -428,8 +441,8 @@ public:
 			valueOftable = total;
 		}
 	}
-	
-	void Ltr_Clear() {
+
+	void literal_table_Clear() {
 		for ( int i = 0 ; i < literal_table.size() ; i++ ) {
 			literal_table[i].str.clear();
 			literal_table[i].address.clear();
@@ -437,6 +450,16 @@ public:
 		}
 		
 		literal_table.clear();
+	}
+		
+	void literal_table_buffer_Clear() {
+		for ( int i = 0 ; i < literal_table_buffer.size() ; i++ ) {
+			literal_table_buffer[i].str.clear();
+			literal_table_buffer[i].address.clear();
+			literal_table_buffer[i].value = 0;
+		}
+		
+		literal_table_buffer.clear();
 	}
 	
 	void Clear() { // 初始化 
@@ -473,8 +496,8 @@ public:
 		}
 			
 		string_table.clear();
-		
-		Ltr_Clear() ;
+		literal_table_Clear();
+		literal_table_buffer_Clear() ;
 	}
 	
 };
@@ -492,6 +515,7 @@ private:
 	typedef struct symTb{
 		int value;
 		string address;
+		string name;
 		string machine_code;
 		string str;
 	}symbolTb;
@@ -499,7 +523,8 @@ private:
 	typedef struct sR {
 		string str; // 原始程式碼 
 		string address; // 地址 
-		string machine_code; // 機器碼 
+		string machine_code; // 機器碼
+		string error_msg;
 	}sourceRecord;
 	
 	fstream file;
@@ -556,6 +581,7 @@ public:
 			sourceRecord sourceOfLine;
 			sourceOfLine.address = "-1";
 			sourceOfLine.machine_code = "-1";
+			sourceOfLine.error_msg = "-1";
 			table.Bulid_base_table();
 			table.Bulid_opcode_table();
 			int charnum = 0,line = 0;
@@ -721,10 +747,9 @@ public:
 				}
 				
 				else {
-					cout << "<-Error Message-> Line: " + convert.itos(line);
-					if ( line+2 < 10 )
-						cout << " ";
-					cout << " Machine Code Translate Error!!!" << endl; 
+					string str = "Machine Code Translate Error!!!";
+					source[line-1].error_msg = str;
+					cout << "<-Error Message-> " + str + " Please see the output file." << endl;;
 				}
 
 				string other2 = Middle( other );
@@ -783,18 +808,20 @@ public:
 	}
 	
 	void Source_Insert( int x ) {
-		int add = table.Get_literal_table_size();
+		int add = table.Get_literal_table_buffer_size();
 		int g = 1;
 		for ( int i = 0 ; i < add ; i++ ) {
 			sourceRecord newR;
-			newR.str = table.Get_literal_str(i);
-			newR.address = table.Get_literal_address(i);
-			newR.machine_code = table.Get_literal_mac(i);
+			newR.str = table.Get_literal_table_buffer_str(i);
+			newR.address = table.Get_literal_table_buffer_address(i);
+			newR.machine_code = table.Get_literal_table_buffer_mac(i);
+			newR.error_msg = "-1";
 			source.insert(source.begin()+x+g,newR);
 			g++;
 		}
 		
-		table.Ltr_Clear();
+		table.Push_Ltr();
+		table.literal_table_buffer_Clear();
 		for ( int j = 0 ; j < token_record.size() ; j++ ) {
 			if ( x <= token_record[j].line ) {
 				token_record[j].line = token_record[j].line + add;
@@ -823,7 +850,7 @@ public:
 					}
 										
 					else if ( table.Compare(token_record[j].str,"LTORG") ) {
-						pc = table.Set_literal_table(pc);
+						pc = table.Set_literal_table_buffer(pc);
 						Source_Insert( x );
 					}
 					
@@ -842,7 +869,9 @@ public:
 						}
 						
 						else {
-							cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Duplicated Symbol"; 
+							string str = "Duplicated Symbol!!!";
+							cout << "<-Error Message-> " + str + " Please see the output file." << endl;
+							source[x].error_msg = str; 
 						}
 					}
 
@@ -851,7 +880,11 @@ public:
 							    ( tokennum == 6 || tokennum == 4 ) ) ) {
 						point++;
 					}
-										
+					
+					else if ( token_record[j].str[0] == 39 ) {
+						point++;
+					}	
+					
 					else if (token_record[j].numOftable == 4 && token_record[j].str == "=" &&
 					          ( tokennum == 3 || tokennum == 2 ) ) {
 						literal = true;
@@ -862,6 +895,7 @@ public:
 						ltr.str = token_record[j].str;
 						ltr.address = "-1";
 						if ( token_record[j].numOftable == 7 ) {
+							ltr.name = token_record[j].str;
 							ltr.str = "*\t=C'"+ token_record[j].str + "'";
 							string temp;
 							for ( int g = 0 ; g < token_record[j].str.size() ; g++ ) {
@@ -875,13 +909,14 @@ public:
 						
 						else if ( token_record[j].numOftable == 6 ) {
 							if ( point != 0 ) {
+								ltr.name = token_record[j].str;
 								ltr.str = "*\t=X'"+ token_record[j].str + "'";
 							}
 							
 							ltr.machine_code = token_record[j].str;
 						}
-						
-						table.Push_in_literal_table("-1",ltr.machine_code,ltr.str);
+	
+						table.Push_in_literal_table_buffer("-1",ltr.machine_code,ltr.str,ltr.name);
 					}
 					
 					else if ( table.Compare(token_record[j].str,"START") ) {
@@ -906,7 +941,9 @@ public:
 						}
 						
 						else {
-							cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
+							string str = "Sytax Error!!!";
+							cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+							source[x].error_msg = str;
 						}
 						
 					}
@@ -919,7 +956,9 @@ public:
 					    		pc = pc + 4;
 					    	else if ( token_record[j-1].line == x && token_record[j-1].str != "+" 
 							          && token_record[j-1].numOftable == 4 ) {
-					    		cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
+							    string str = "Sytax Error!!!";
+					    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+					    		source[x].error_msg = str;
 					    	}
 					    	else {
 					    		pc = pc + Instr_Length(token_record[j].str);
@@ -971,7 +1010,7 @@ public:
 								source[x].address = convert.itos( atoi( op1.c_str() ) / atoi(op2.c_str() ));
 							}
 							
-							else {
+							else if ( op1.size() != 0 ) {
 								source[x].address = op1;
 							}
 							
@@ -1003,7 +1042,9 @@ public:
 						}
 						
 						else {
-							cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
+						    string str = "Sytax Error!!!";
+				    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+				    		source[x].error_msg = str;
 						}
 					}
 					
@@ -1018,22 +1059,36 @@ public:
 					}
 					
 					else if ( table.Compare(token_record[j].str,"BYTE") ) {
+						if ( token_record[j+1].str[0] == 39 && token_record[j+1].line == x) {
+							point++;
+						}
+						
 						if ( token_record[j+2].numOftable == 7 &&
 						     token_record[j+2].line == x ) {
 							int length = token_record[j+2].str.size();
 							pc = pc + length;
-							j = j + 2;
+							if ( token_record[j+3].str[0] == 39 && token_record[j+3].line == x) {
+								point++;
+							}
+							
+							j = j + 3;
 						}
 						
 						else if ( token_record[j+2].numOftable == 6 &&
 						          token_record[j+2].line == x ) {
 							int length = token_record[j+2].str.size() / 2;
 							pc = pc + length;
-							j = j + 2;
+							if ( token_record[j+3].str[0] == 39 && token_record[j+3].line == x) {
+								point++;
+							}
+							
+							j = j + 3;
 						}
 						
 						else {
-							cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
+						    string str = "Sytax Error!!!";
+				    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+				    		source[x].error_msg = str;
 						}
 
 					}
@@ -1042,13 +1097,22 @@ public:
 						 table.Compare(token_record[j].str,"RESB") || 
 						 table.Compare(token_record[j].str,"RESW") ) {
 						if ( !table.Is_number(token_record[j+1].str) && token_record[j+1].line != x  ) {
-							cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
+						    string str = "Sytax Error!!!";
+				    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+				    		source[x].error_msg = str;
 						}
 					}
 					tokennum++;
 					
 				}
-				
+
+				else if ( point % 2 != 0 && point != 0 ) {
+				    string str = "Sytax Error!!!";
+		    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+		    		source[x].error_msg = str;
+		    		point = 0;
+				}
+								
 				else if ( x < token_record[j].line ) {
 					break;
 				}
@@ -1058,12 +1122,8 @@ public:
 				}
 
 				else if ( table.Compare(token_record[j+1].str,"END") ) {
-					pc = table.Set_literal_table(pc);
+					pc = table.Set_literal_table_buffer(pc);
 					Source_Insert( x );
-				}
-				
-				else if ( point % 2 != 0 ) {
-					cout << "<-Error Message-> Line: " + convert.itos(x+1) + " Sytax Error!!!\n";
 				}
 			}
 		}
@@ -1139,7 +1199,9 @@ public:
 						}
 						
 						else {
-							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+						    string str = "Sytax Error!!!";
+				    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+				    		source[line].error_msg = str;
 						}
 					}
 					
@@ -1148,14 +1210,20 @@ public:
 					    if ( token_record[j+1].numOftable == 5 ) {
 					    	escape = true;
 					    	base_adr = table.Get_Address( token_record[j+1].str);
-					    	if ( base_adr == "NO")
-					    		cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Undefined Symbol!!!\n";
+					    	if ( base_adr == "NO") {
+							    string str = "Undefined Symbol!!!";
+					    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+					    		source[line].error_msg = str;					    		
+							}
+							
 						    base = true;
 							j++;
 						}
 						
 						else {
-							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+						    string str = "Sytax Error!!!";
+				    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+				    		source[line].error_msg = str;
 						}
 					}
 					
@@ -1183,7 +1251,13 @@ public:
 						x = "1";
 						if ( type == "SICXE") {
 							if ( r1.size() == 0 ) {
-								r1 = temp;
+								if ( adr_s.size() != 0 && comma || adr_s.size() == 0 )
+									r1 = temp;
+								else {
+								    string str = "Sytax Error!!!";
+						    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+						    		source[line].error_msg = str;									
+								}
 							}
 							
 							else if ( r2.size() == 0 && comma ) { 
@@ -1191,7 +1265,9 @@ public:
 							}
 							
 							else {
-								cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+							    string str = "Sytax Error!!!";
+					    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+					    		source[line].error_msg = str;
 							}
 						}
 					}
@@ -1201,12 +1277,16 @@ public:
 							operand = true;
 							adr_s = table.Get_Address(token_record[j].str);							
 							if ( adr_s == "NO" ) {
-								cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Undefined Symbol!!!\n";
+							    string str = "Undefined Symbol!!!";
+					    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+					    		source[line].error_msg = str;
 							}
 						}
 						
 						else {
-							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+						    string str = "Sytax Error!!!";
+				    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+				    		source[line].error_msg = str;
 						}
 					}
 					
@@ -1215,8 +1295,11 @@ public:
 							opcode = table.Get_opcode(token_record[j].str);
 						else if ( opcode.size() == 0 && type == "SICXE" )
 							opcode = token_record[j].str;
-						else
-							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+						else {
+						    string str = "Sytax Error!!!";
+				    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+				    		source[line].error_msg = str;
+						}
 					}
 					
 					else if ( table.Compare(token_record[j].str,"WORD") && ( tokennum == 1 || tokennum == 2 ) ) {
@@ -1256,7 +1339,9 @@ public:
 					}
 					
 					else {
-						cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+					    string str = "Sytax Error!!!";
+			    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+			    		source[line].error_msg = str;
 					}
 					
 					tokennum++;
@@ -1271,7 +1356,9 @@ public:
 						}
 						
 						else {
-							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+						    string str = "Sytax Error!!!";
+				    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+				    		source[line].error_msg = str;
 						}
 					}
 					
@@ -1293,11 +1380,13 @@ public:
 						}
 						
 						else if ( !escape ) {
-							cout << "<-Error Message-> Line: " + convert.itos(line+1) + " Sytax Error!!!\n";
+						    string str = "Sytax Error!!!";
+				    		cout << "<-Error Message-> " + str + " Please see the output file."<< endl;
+				    		source[line].error_msg = str;
 						}
 					}
 				}
-				
+
 				else if ( line < token_record[j].line ) {
 					break;
 				}
@@ -1355,24 +1444,40 @@ public:
 				if ( type == "SICXE" )
 					file << "\t\t";
 				int tokennum = 0;
+				bool comma = false;
 				for ( int j = 0 ; j < token_record.size() ; j++ ) {
 					if ( token_record[j].line == i ) {
 						tokennum++;
+						if ( token_record[j].str == "," ) {
+							comma = true;
+						}
+					}
+					
+					else if ( token_record[j].line > i ) { 
+						break;
 					}
 				}
+
+				if ( tokennum < 2 ) {
+					file << "\t\t\t";
+				}
 				
-				if ( source[i].machine_code != "-1" ) {
+				else if ( comma ) {
+					file << "\t";
+				}
+				
+				else {
+					file << "\t\t";
+				}
+				
+				if ( source[i].machine_code != "-1" && source[i].error_msg == "-1" ) {
 					string str = source[i].machine_code;
 					transform(str.begin(), str.end(), str.begin(), ::toupper);
-					if ( tokennum < 2 ) {
-						file << "\t\t\t";
-					}
-					
-					else {
-						file << "\t\t";
-					}
-					
 					file << str;
+				}
+				
+				else if ( source[i].error_msg != "-1" ) {
+					file << source[i].error_msg;
 				}
 				
 				line = line + 5;
