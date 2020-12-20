@@ -1,0 +1,600 @@
+# include<fstream>
+# include<string.h>
+# include<iostream>
+# include<cctype>
+# include<stdlib.h>
+# include<cstdlib>
+# include<limits>
+# include<cstring>
+# include<cctype>
+# include<algorithm>
+# include<sstream>
+# include<vector>
+# include<iomanip>
+using namespace std;
+
+typedef enum { Space = -1, Newline, Delimiter, Digit, Other, Special
+} CutType; // 字元的類型
+
+typedef enum { Array = 1, Bool, Char, Int, Lab, Real
+}DataType;
+
+class Cutter {
+public:
+	CutType Cut( char ch ) { // 回傳字元的類型 
+		if ( ch == 32 || ch == 9 || ch == 10 ) {
+			if ( ch == 10 ) {
+				return Newline;
+			}
+			
+			return Space;
+		}
+		
+		else if ( ch == 59 || ch == 40 || ch == 41 || 
+		          ch == 61 || ch == 43 || ch == 45 ||
+		          ch == 42 || ch == 47 || ch == 58 ||
+				  ch == 44 || ch == 124 || ch == 60 ||
+				  ch == 62 ) {
+		          	
+			return Delimiter;
+		}
+		
+		else if ( ch >= 0 && ch <= 127 ) {
+			return Other;
+		}
+		
+		else {
+			return Special;
+		}
+	}
+};
+
+class Table {
+private:
+	fstream file;
+	Cutter cutter;
+	typedef struct rT {
+		string str; // 名稱
+		int subroutine; 
+		int entry; //  位置
+		DataType type;
+		int pointer;
+	}recordType;
+	
+	vector<string> test;
+	vector< vector<string> > base_table; // 保留字表格
+	vector<recordType> integer_table; // 數字表格
+	vector<recordType> rel_num_table; // 實數表格 
+	vector<recordType> id_table;
+	vector<recordType> infor_table;
+	
+public:
+	void Bulid_base_table() { // 建立表格
+		stringstream ss;
+		for ( int i = 1 ; i <= 2 ; i++ ) {
+			ss << i;
+			string num = ss.str();
+			string filename = "Table" + num + ".table";
+			file.open( filename.c_str(), ios::in );
+			if ( !file.fail() ) {
+				string line;
+				int x = 1;
+				vector<string> record;
+				while ( !file.eof() && getline( file, line ) ) {
+					line.erase(line.find_last_not_of(' ')+1);
+					record.push_back( line );
+				}
+				
+				base_table.push_back( record );
+				record.clear();
+				file.close();
+				ss.str("");
+				ss.clear();
+			}
+			
+			else {
+				cout << filename << " 不存在!!!";
+			} 
+		}
+		
+	}
+	
+	bool Push_In_Base_table( string str, int & table, int & entry ) {
+		for ( int i = 0; i < base_table.size() ; i++ ) {
+			for ( int j = 0 ; j < base_table[i].size() ; j++ ) {
+				if ( str == base_table[i][j] ) {
+					table = i+1;
+					entry = j+1;
+					return true;
+				}
+			}
+		}
+		
+		return false;
+	}
+	
+	void Push_In_integer_table( string str, int & table, int & entry ) {
+		recordType record;
+		record.str = str;
+		record.entry = integer_table.size();
+		integer_table.push_back( record );
+		table = 3;
+		entry = record.entry;
+	}
+	
+	void Push_In_rel_num_table( string str, int & table, int & entry ) {
+		recordType record;
+		record.str = str;
+		record.entry = rel_num_table.size();
+		rel_num_table.push_back( record );
+		table = 4;
+		entry = record.entry;
+	}
+	
+	void Push_In_id_table( string str, int & table, int & entry ) {
+		recordType record;
+		record.str = str;
+		record.entry = rel_num_table.size();
+		rel_num_table.push_back( record );
+		table = 5;
+		entry = record.entry;		
+	}
+	
+};
+
+class Compiler {
+private:
+	typedef struct rT {
+		string str;
+		int table_value;
+		int entry;
+		int line;
+	}recordType;
+	
+	Table table;
+	Cutter cut;
+	fstream file;
+	vector< vector<recordType> > syntax_rule;
+	vector<recordType> token_record;
+	vector<string> source;
+	
+public:
+	int Hash_Key( string str ) {
+		int x = 0;
+		for ( int i = 0 ; i < str.size() ; i++ ) {
+			x = x + str[i];
+		}
+		
+		return x%100;
+	}
+	
+	bool Lexical_Analysis( string name ) {
+		
+		file.open( name.c_str(), ios::in );
+		if ( file.fail() ) {
+			return false;
+		}
+		
+		else {
+			char ch;
+			string temp;
+			table.Bulid_base_table();
+			int line = 1;
+			while ( file.get(ch) ) {
+				CutType ch_type	= cut.Cut(ch);
+				if ( ch_type == Space || ch_type == Newline ) {
+					if ( temp.size() != 0 ) {
+						token_record.push_back( Set_New_Token( temp, line ) );
+						temp.clear();
+					}
+					
+					if ( ch_type == Newline ) {
+						line++;
+					}
+				}
+				
+				else if ( ch_type == Delimiter ) {
+					if ( temp.size() != 0 ) {
+						token_record.push_back( Set_New_Token( temp, line ) );
+						temp.clear();
+						temp = temp + ch;
+						token_record.push_back( Set_New_Token( temp, line ) );
+						temp.clear();
+					}
+					
+					else {
+						temp = temp + ch;
+						token_record.push_back( Set_New_Token( temp, line ) );
+						temp.clear();
+					}
+				}
+				
+				else if ( ch_type == Special ) { // 處理全形符號 
+					if ( temp.size() != 0 ) {
+						token_record.push_back( Set_New_Token( temp, line ) );
+						temp.clear();
+						temp = temp + ch;
+						file.get(ch);
+						temp = temp + ch;
+						token_record.push_back( Set_New_Token( temp, line ) );
+						temp.clear();						
+					}
+					
+					else {
+						temp = temp + ch;
+						file.get(ch);
+						temp = temp + ch;
+						token_record.push_back( Set_New_Token( temp, line ) );
+						temp.clear();
+					}
+					
+					
+				}
+				
+				else if ( ch_type == Other ) {
+					temp = temp + ch;
+				}
+			}
+			
+			file.close();
+			
+			return true;
+		}
+		
+	}
+
+	int Find_Key( string str ) {
+		for ( int i = Hash_Key( str ) ; i < syntax_rule.size() ; i++ ) {
+			if ( syntax_rule[i][0].str != "-1" ) {
+				if ( str == syntax_rule[i][1].str ) {
+					return i;
+				}
+				
+				else {
+					i++;
+					if ( i > syntax_rule.size() ) {
+						i = -1;
+					}
+				}
+			}
+		}
+		
+		return -1;
+	}
+	
+	int Set_Key( int key ) {
+		for ( int i = 0 ; i < syntax_rule.size() ; i++ ) {
+			if ( syntax_rule[i][1].entry != -1 && syntax_rule[i][1].entry != key )
+				;
+			else if ( syntax_rule[i][1].entry == key) {
+				key++;
+				if ( key > 99 ) {
+					key = 0;
+				}
+				
+				i = -1;
+			}
+		}
+		
+		return key;
+	}
+	
+	bool Is_Letter( char ch ) {
+		if ( ch >= 65 && ch <= 90 ) {
+			return true;
+		}
+		
+		else if ( ch >= 97 && ch <= 122 ) {
+			return true;
+		}
+		
+		return false;
+	}
+
+	bool Is_Integer( string str ) {
+		int x = 0;
+		for ( int i = 0 ; i < str.size() ; i++ ) {
+			if ( Is_Digit(str[i])) {
+				x++;
+			}
+		}
+		
+		if ( x == str.size() )
+			return true;
+		else
+			return false;
+	}
+	
+	bool Is_Digit( char ch ) {
+		if ( ch >= 48 && ch <= 57 ) {
+			return true;
+		}
+		
+		return false;
+	}
+	
+	
+	bool Build_Syntax_Rule() { // 建立語法規則
+		string name = "Syntax_Rule.srl";
+		file.open(name.c_str(), ios::in );
+		if ( file.fail() ) {
+			return false;
+		}
+		
+		else{
+			char ch;
+			recordType temp;
+			temp.entry = -1;
+			vector<recordType> record;
+			vector< vector<recordType> > syntax_rule_temp;
+			while ( file.get(ch)) {
+				CutType ch_type	= cut.Cut(ch);
+				if ( ch_type == Newline ) {
+					if ( temp.str.size() != 0 ) {
+						record.push_back(temp);
+						temp.str.clear();
+					}
+					
+					if ( ch_type == Newline ) {
+						syntax_rule_temp.push_back(record);
+						record.clear();
+					}
+				}
+				
+				else if ( ch_type == Delimiter ) {
+					if ( temp.str.size() != 0 ) {
+						record.push_back(temp);
+						temp.str.clear();
+						temp.str = temp.str + ch;
+						record.push_back(temp);
+						temp.str.clear();
+					}
+					
+					else {
+						temp.str = temp.str + ch;
+						record.push_back(temp);
+						temp.str.clear();
+					}
+				}
+				
+				else if ( ch_type == Special ) { // 處理全形符號 
+					if ( temp.str.size() != 0 ) {
+						record.push_back(temp);
+						temp.str.clear();
+						temp.str = temp.str + ch;
+						file.get(ch);
+						temp.str = temp.str + ch;
+						record.push_back(temp);
+						temp.str.clear();						
+					}
+					
+					else {
+						temp.str = temp.str + ch;
+						file.get(ch);
+						temp.str = temp.str + ch;
+						record.push_back(temp);
+						temp.str.clear();
+					}
+					
+					
+				}
+				
+				else {
+					temp.str = temp.str + ch;
+				}
+			}
+
+			file.close();
+			vector<int> key;
+			temp.str = "-1";
+			temp.entry = -1;
+			record.clear();
+			record.push_back(temp);
+			for ( int i = 0 ; i < syntax_rule_temp.size() ; i++ ) {
+				syntax_rule_temp[i][1].entry = Set_Key( Hash_Key(syntax_rule_temp[i][1].str ) );
+				key.push_back(syntax_rule_temp[i][1].entry);
+			}
+			
+			sort(key.begin(),key.end());
+			
+			for ( int i = 0 ; i < key[key.size()-1] ; i++ ) {
+				syntax_rule.push_back(record);
+			}
+			
+			for ( int i = 0 ; i < syntax_rule_temp.size() ; i++ ) {
+				int key = syntax_rule_temp[i][1].entry;
+				syntax_rule.insert( syntax_rule.begin()+key,syntax_rule_temp[i]);
+				syntax_rule.erase( syntax_rule.begin());
+			}
+			
+			record.clear();
+			key.clear();
+			for ( int i = 0 ; i < syntax_rule_temp.size() ; i++ ) {
+				syntax_rule_temp[i].clear();
+			}
+			
+			syntax_rule_temp.clear();
+		}
+	}
+	
+	void Traverse_Non_Terminal_Symbol( recordType token, int i, int r) {
+		bool correct = true;
+		int token_i = 0, repeat = 0;
+		if ( r < syntax_rule.size() && i < token.size() ) {
+			for ( int k = 5 ; k < syntax_rule[r].size() && token_i < token[i].size(); k++ ) {
+				if ( token.str == syntax_rule[r][k].str ) {
+					;
+				}
+				
+				else if ( syntax_rule[r][k].str == "<" ) {
+					if ( syntax_rule[r][k+1].str == "letter" && token.table_value != 2 ) {
+						if ( Is_Letter( token[i][token_i]) ) {
+							token_i++;
+							correct = true;
+						}
+						else {
+							correct = false;
+						}
+						
+					}
+					
+					else if ( syntax_rule[r][k+1].str == "digit" ) {
+						if ( Is_Digit( token[i][token_i]) ) {
+							token_i++;
+							correct = true;
+						}
+						
+						else {
+							correct = false;
+						}
+					}
+					
+					else if (syntax_rule[r][k+1].str == "unsigned integer" ) {
+						if ( Is_Integer( token[i] ) ) {
+							correct = true;
+						}
+					}
+					
+					else {
+						Traverse_Non_Terminal_Symbol( token, i, Find_Key(syntax_rule[r][k].str) );
+						i++;
+					}
+				}
+	
+				else if ( syntax_rule[r][k].str == token[i].str == ";" ) {
+					return true;
+				}
+							
+				else if ( syntax_rule[r][k].str == "|" ) {
+					correct = true;
+				}
+				
+				else if ( syntax_rule[r][k].str == "{" ) {
+					repeat = k;
+				}
+				
+				else if ( syntax_rule[r][k].str == "}" ) {
+					k = repeat;
+				}
+			}
+			
+			Traverse_Non_Terminal_Symbol( token, i, r+1 );
+		}
+	}
+	
+	bool Build_Parse_Tree( vector < recordType > sourceOfLine ) {
+		int i = 0;
+		int r = 0;
+		Traverse_Non_Terminal_Symbol( sourceOfLine, i,r);
+	}
+	
+	void Syntax_Analysis() { // 語法分析
+		int tokennum = 0;
+		vector<recordType> sourceOfLine;
+		for ( int i = 0 ; i < token_record.size() ; i++ ) {
+			sourceOfLine.push_back( token_record[i] );
+			/*if ( Build_Parse_Tree(sourceOfLine)) {
+				;
+			}*/ 
+		}
+	}
+		
+	recordType Set_New_Token( string str, int line ) {
+		recordType record;
+		int table_value = -1, entry = -1;
+		if ( table.Push_In_Base_table( str, table_value, entry ) ) {
+			record.str = str;
+			record.table_value = table_value;
+			record.entry = entry;
+			record.line = line;
+		}
+		
+		else {
+			int size = 0;
+			for ( int i = 0 ; i < str.size() ; i++ ) {
+				if ( str[i] >= 48 && str[i] <= 59 ) {
+					size++;
+				}
+			}
+			
+			if ( size == str.size() ) {
+				table.Push_In_integer_table( str, table_value, entry);
+				record.str = str;
+				record.table_value = table_value;
+				record.entry = entry;
+				record.line = line;
+			}
+			
+			else if ( str.find_first_of(".") != -1 ) {
+				table.Push_In_rel_num_table( str, table_value, entry);
+				record.str = str;
+				record.table_value = table_value;
+				record.entry = entry;
+				record.line = line;			
+			}
+			
+			else {
+				table.Push_In_id_table( str, table_value, entry);
+				record.str = str;
+				record.table_value = table_value;
+				record.entry = entry;
+				record.line = line;			
+			}
+			
+		}
+		
+		return record;
+	}
+};
+
+int main(void) {
+	Compiler compiler;
+	string name;
+	while ( true ) {
+		cout << "****** Francis Compiler ******\n"
+			 << "**     [1].輸入檔案名稱     **\n"
+			 << "**     [other].離開         **\n"
+			 << "******************************\n"
+			 << ">";
+		int command = -1;
+		cin >> command ;
+		if ( command == 1 ) {
+			cout << endl;
+			while ( true ) {
+				cout << "檔案名稱[0.離開]:";
+				cin >> name;
+				if ( name != "0" ) {
+					if ( compiler.Lexical_Analysis(name) ) {
+						cout << endl;
+						if ( compiler.Build_Syntax_Rule() ) {
+							compiler.Syntax_Analysis();
+						}
+						
+						else {
+							cout << "GG" << endl;
+						}
+					}
+					
+					else {
+						cout << name << " 不存在!!!" << endl;
+					}
+				}
+				
+				else if ( name == "0" ) {
+					break;
+				}
+				
+			}
+			
+		}
+		
+		else {
+			break;
+		}
+		
+		name.clear();
+		cout << endl;
+	}
+	
+	cout << "\n****** 程式結束!!! ******\n";
+}
