@@ -34,7 +34,7 @@ public:
 		          ch == 61 || ch == 43 || ch == 45 ||
 		          ch == 42 || ch == 47 || ch == 58 ||
 				  ch == 44 || ch == 124 || ch == 60 ||
-				  ch == 62 ) {
+				  ch == 62 || ch == 123 || ch == 125 ) {
 		          	
 			return Delimiter;
 		}
@@ -159,14 +159,6 @@ private:
 	vector<string> source;
 	
 public:
-	int Hash_Key( string str ) {
-		int x = 0;
-		for ( int i = 0 ; i < str.size() ; i++ ) {
-			x = x + str[i];
-		}
-		
-		return x%100;
-	}
 	
 	bool Lexical_Analysis( string name ) {
 		
@@ -236,48 +228,14 @@ public:
 				}
 			}
 			
+			
 			file.close();
 			
 			return true;
 		}
 		
 	}
-
-	int Find_Key( string str ) {
-		for ( int i = Hash_Key( str ) ; i < syntax_rule.size() ; i++ ) {
-			if ( syntax_rule[i][0].str != "-1" ) {
-				if ( str == syntax_rule[i][1].str ) {
-					return i;
-				}
-				
-				else {
-					i++;
-					if ( i > syntax_rule.size() ) {
-						i = -1;
-					}
-				}
-			}
-		}
-		
-		return -1;
-	}
 	
-	int Set_Key( int key ) {
-		for ( int i = 0 ; i < syntax_rule.size() ; i++ ) {
-			if ( syntax_rule[i][1].entry != -1 && syntax_rule[i][1].entry != key )
-				;
-			else if ( syntax_rule[i][1].entry == key) {
-				key++;
-				if ( key > 99 ) {
-					key = 0;
-				}
-				
-				i = -1;
-			}
-		}
-		
-		return key;
-	}
 	
 	bool Is_Letter( char ch ) {
 		if ( ch >= 65 && ch <= 90 ) {
@@ -326,7 +284,6 @@ public:
 			recordType temp;
 			temp.entry = -1;
 			vector<recordType> record;
-			vector< vector<recordType> > syntax_rule_temp;
 			while ( file.get(ch)) {
 				CutType ch_type	= cut.Cut(ch);
 				if ( ch_type == Newline ) {
@@ -336,7 +293,7 @@ public:
 					}
 					
 					if ( ch_type == Newline ) {
-						syntax_rule_temp.push_back(record);
+						syntax_rule.push_back(record);
 						record.clear();
 					}
 				}
@@ -385,117 +342,143 @@ public:
 			}
 
 			file.close();
-			vector<int> key;
-			temp.str = "-1";
-			temp.entry = -1;
-			record.clear();
-			record.push_back(temp);
-			for ( int i = 0 ; i < syntax_rule_temp.size() ; i++ ) {
-				syntax_rule_temp[i][1].entry = Set_Key( Hash_Key(syntax_rule_temp[i][1].str ) );
-				key.push_back(syntax_rule_temp[i][1].entry);
-			}
-			
-			sort(key.begin(),key.end());
-			
-			for ( int i = 0 ; i < key[key.size()-1] ; i++ ) {
-				syntax_rule.push_back(record);
-			}
-			
-			for ( int i = 0 ; i < syntax_rule_temp.size() ; i++ ) {
-				int key = syntax_rule_temp[i][1].entry;
-				syntax_rule.insert( syntax_rule.begin()+key,syntax_rule_temp[i]);
-				syntax_rule.erase( syntax_rule.begin());
-			}
-			
-			record.clear();
-			key.clear();
-			for ( int i = 0 ; i < syntax_rule_temp.size() ; i++ ) {
-				syntax_rule_temp[i].clear();
-			}
-			
-			syntax_rule_temp.clear();
+//			for ( int i = 0 ; i < syntax_rule.size() ; i++ ) {
+//				cout << syntax_rule[i][5].str << endl;
+//			}
 		}
 	}
 	
-	void Traverse_Non_Terminal_Symbol( recordType token, int i, int r) {
-		bool correct = true;
-		int token_i = 0, repeat = 0;
-		if ( r < syntax_rule.size() && i < token.size() ) {
-			for ( int k = 5 ; k < syntax_rule[r].size() && token_i < token[i].size(); k++ ) {
-				if ( token.str == syntax_rule[r][k].str ) {
-					;
+	bool Find( string str, string str2 ) {
+		transform(str.begin(),str.end(),str.begin(), ::toupper);
+		transform(str2.begin(),str2.end(),str2.begin(), ::toupper);		
+		if ( str.find( str2 ) ) {
+			return true;
+		}
+		
+		else {
+			return false;
+		}
+	}
+	
+	int Find_Syntax_Rule( string str ) {
+		for ( int i = 0 ; i < syntax_rule.size() ; i++ ) {
+			if ( syntax_rule[i][1].str == str ) {
+				return i;
+			}
+		}
+		
+		return -1;
+	}
+	
+	void Build_Parse_Tree( vector<recordType> sourceOfLine, int & i, int j, int & correct ) {
+		int token_i = 0, repeat = -1, pre_i = i, inside = -1, pre_c = correct;
+		bool other = false, token_i_check = false;
+		if ( i < sourceOfLine.size() && j < syntax_rule.size() ) {
+			for ( int x = 5 ; x < syntax_rule[j].size() && i < sourceOfLine.size() && 
+				  token_i < sourceOfLine[i].str.size() ; x++ ) {
+//					cout << syntax_rule[j][x].str << endl;
+				if ( syntax_rule[j].size() == 5 ) { // skip empty statement
+					break;
 				}
 				
-				else if ( syntax_rule[r][k].str == "<" ) {
-					if ( syntax_rule[r][k+1].str == "letter" && token.table_value != 2 ) {
-						if ( Is_Letter( token[i][token_i]) ) {
-							token_i++;
-							correct = true;
-						}
-						else {
-							correct = false;
-						}
-						
-					}
-					
-					else if ( syntax_rule[r][k+1].str == "digit" ) {
-						if ( Is_Digit( token[i][token_i]) ) {
-							token_i++;
-							correct = true;
-						}
-						
-						else {
-							correct = false;
-						}
-					}
-					
-					else if (syntax_rule[r][k+1].str == "unsigned integer" ) {
-						if ( Is_Integer( token[i] ) ) {
-							correct = true;
-						}
+				else if ( sourceOfLine[i].str == syntax_rule[j][x].str ) { // match token
+					correct++;
+					i++;
+				}
+				
+				// ************** Special Symbol ********************//
+				else if ( syntax_rule[j][x].str == "letter" ) {
+					if ( Is_Letter( sourceOfLine[i].str[token_i] ) ) {
+						token_i++;
+						token_i_check = true;
 					}
 					
 					else {
-						Traverse_Non_Terminal_Symbol( token, i, Find_Key(syntax_rule[r][k].str) );
-						i++;
+						token_i_check = false;
 					}
 				}
-	
-				else if ( syntax_rule[r][k].str == token[i].str == ";" ) {
-					return true;
+
+				else if ( syntax_rule[j][x].str == "digit" ) {
+					if ( Is_Digit( sourceOfLine[i].str[token_i] ) ) {
+						token_i++;
+						token_i_check = true;
+					}
+					
+					else {
+						token_i_check = false;
+					}
 				}
-							
-				else if ( syntax_rule[r][k].str == "|" ) {
-					correct = true;
+				// ************** Special Symbol ********************//
+				
+				else if ( syntax_rule[j][x].str == "<" ) {
+					;
 				}
 				
-				else if ( syntax_rule[r][k].str == "{" ) {
-					repeat = k;
+				else if ( syntax_rule[j][x].str == ">" ) {
+					;
+				}
+								
+				else if ( syntax_rule[j][x].str == "{" ) { // record the index
+					repeat = x;
+					inside = i;
 				}
 				
-				else if ( syntax_rule[r][k].str == "}" ) {
-					k = repeat;
+				else if ( syntax_rule[j][x].str == "|" ) { // It may have more options
+					other = true;
+					if ( pre_c != correct && repeat == -1 ) {
+						break;
+					}
+				}
+				
+				else if ( syntax_rule[j][x].str == "}" ) { // It may led to repeat many times in this syntax rule
+					if ( pre_c != correct ) {
+						x = repeat;
+					}
+				}
+				
+				else if ( Find_Syntax_Rule( syntax_rule[j][x].str ) != -1 ) { // Find Next Symbol
+					pre_c = correct;
+					Build_Parse_Tree( sourceOfLine, i, Find_Syntax_Rule( syntax_rule[j][x].str ), correct );
+				}
+				
+				else if ( syntax_rule[j][x].str != sourceOfLine[i].str && i == 0 ) { // the first token not match, skip this
+					if ( repeat )
+						break;
+					else {
+						Build_Parse_Tree( sourceOfLine, i, j+1, correct );
+					}
+					break;
 				}
 			}
-			
-			Traverse_Non_Terminal_Symbol( token, i, r+1 );
+
+			if ( token_i_check ) { // idtentifier match
+				correct++;
+				i++;
+			}
 		}
 	}
 	
-	bool Build_Parse_Tree( vector < recordType > sourceOfLine ) {
-		int i = 0;
-		int r = 0;
-		Traverse_Non_Terminal_Symbol( sourceOfLine, i,r);
-	}
-	
 	void Syntax_Analysis() { // 語法分析
-		int tokennum = 0;
+		//int max = token_record[token_record.size()-1].line;
+		int max = 7;
 		vector<recordType> sourceOfLine;
-		for ( int i = 0 ; i < token_record.size() ; i++ ) {
-			sourceOfLine.push_back( token_record[i] );
-			/*if ( Build_Parse_Tree(sourceOfLine)) {
-				;
-			}*/ 
+		for ( int l = 6; l < max ; l++ ) {
+			for ( int i = 0 ; i < token_record.size() ; i++ ) {
+				if ( l == token_record[i].line ) {
+					sourceOfLine.push_back( token_record[i] );
+				}
+				
+				else if ( token_record[i].line > l ) {
+					int f = 0, j = 0, correct = 0;
+					Build_Parse_Tree(sourceOfLine, f, j, correct);
+					if ( correct != sourceOfLine.size() ) {
+						cout << "Syntax Error !!!" << endl;	
+					}
+					
+					sourceOfLine.clear();
+					break;
+				}
+			}
 		}
 	}
 		
